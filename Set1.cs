@@ -12,7 +12,7 @@ namespace MyCadTools
 
     
 
-    public class  Class1
+    public static class  Set1
     {
 
         private class MyBunch
@@ -32,7 +32,7 @@ namespace MyCadTools
         /// 计算两点斜率
         /// </summary>
         [CommandMethod("CalcSlope")] // 添加命令标识符​
-        public void CalcSlope()
+        public static void CalcSlope()
         {
             try
             {
@@ -66,7 +66,7 @@ namespace MyCadTools
         /// </summary>
         [CommandMethod("DrawSlope")] // 添加命令标识符​
 
-        public void DrawSlope()
+        public static void DrawSlope()
         {
             try
             {
@@ -123,7 +123,7 @@ namespace MyCadTools
         /// </summary>
         [CommandMethod("Rearrange")] // 添加命令标识符​
 
-        public void Rearrange()
+        public static void Rearrange()
         {
             Database db = HostApplicationServices.WorkingDatabase;
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
@@ -224,7 +224,7 @@ namespace MyCadTools
         /// 暂只支持水平的文字
         /// </summary>
         [CommandMethod("TirmFootline")] // 添加命令标识符
-        public void TrimFootline()
+        public static void TrimFootline()
         {
             List<DBObject> al = my_select_objects();
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
@@ -271,7 +271,7 @@ namespace MyCadTools
         /// 自动编号文字
         /// </summary>
         [CommandMethod("AutoNumbering")] // 添加命令标识符
-        public void AutoNumbering()
+        public static void AutoNumbering()
         {
 
             List<DBObject> al = my_select_objects();
@@ -306,7 +306,7 @@ namespace MyCadTools
 
 
         [CommandMethod("zk")]
-        public void zk()
+        public static void zk()
         {
             List<DBObject> al = my_select_objects();
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
@@ -513,7 +513,7 @@ namespace MyCadTools
 
 
         [CommandMethod("sc01")]
-        public void sc01()
+        public static void sc01()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
             List<DBObject> al = my_select_objects();
@@ -756,7 +756,7 @@ namespace MyCadTools
         }
 
         [CommandMethod("yongdi")]
-        public void yongdi()
+        public static void yongdi()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
@@ -1071,22 +1071,56 @@ namespace MyCadTools
 
 
 
-        [CommandMethod("MYTEST")]
-        public void mytest()
+        public static class mytest1
         {
-            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-            ed.WriteMessage("发现一条未配对的直线"+Environment.NewLine);
-            ed.UpdateScreen();
-            System.Threading.Thread.Sleep(5000);//睡眠500毫秒，也就是0.5秒
-            ed.WriteMessage("结束\n");
+            [CommandMethod("mytest")]
+            public static void mytest()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                string layername = my_get_string("输入图层名：");
+                List<DBObject> al;
+                if (!select_all_objects_on_layer(layername, out al))
+                {
+                    return;
+                }
+                List<Line> lines = new List<Line>();
+                List<DBText> texts = new List<DBText>();
+                foreach (DBObject item in al)
+                {
+                    if (item is Line)
+                    {
+                        Line elo = (Line)item;
+                        if (3.1 < elo.Length && elo.Length < 3.2)
+                        {
+                            lines.Add((Line)item);
+                        }
+
+                    }
+                    else if (item is DBText)
+                    {
+
+
+                        texts.Add((DBText)item);
+                    }
+                }
+                ed.WriteMessage("收集了{0:D}个线，{1:D}个文字\n", lines.Count, texts.Count);
+
+                //开始匹配
+                double dist_tol = 10.0;//小于这个距离认为是一对
+                double angle_tol = 1.0 / 180.0 * 3.14159;//小于这个角度才可能是一对
+
+            }
         }
+    
+
+
         /// <summary>
         /// 修改既有线的两个端点
         /// </summary>
         /// <param name="sp"></param>
         /// <param name="ep"></param>
         /// <param name="line"></param>
-        private static void edit_line(Point3d sp, Point3d ep, Line line)
+        public static void edit_line(Point3d sp, Point3d ep, Line line)
         {
             Database db = HostApplicationServices.WorkingDatabase;
             using (Transaction trans = db.TransactionManager.StartTransaction())
@@ -1103,7 +1137,7 @@ namespace MyCadTools
         /// </summary>
         /// <param name="s"></param>
         /// <param name="text"></param>
-        private static void edit_text(string s, DBText text)
+        public static void edit_text(string s, DBText text)
         {
             Database db = HostApplicationServices.WorkingDatabase;
             using (Transaction trans = db.TransactionManager.StartTransaction())
@@ -1114,7 +1148,7 @@ namespace MyCadTools
             }
         }
 
-        private PromptPointResult GetPoint(PromptPointOptions ppo)
+        public static PromptPointResult GetPoint(PromptPointOptions ppo)
         {
 
             ppo.AllowNone = true;
@@ -1122,13 +1156,13 @@ namespace MyCadTools
             return ed.GetPoint(ppo);
 
         }
-        private PromptDoubleResult GetDouble(PromptDoubleOptions ppo)
+        public static PromptDoubleResult GetDouble(PromptDoubleOptions ppo)
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
             return ed.GetDouble(ppo);
         }
 
-        private double my_get_double(string prompt)
+        public static double my_get_double(string prompt)
         {
             PromptDoubleOptions pdo = new PromptDoubleOptions(prompt);
             pdo.AllowNone = false;
@@ -1137,7 +1171,7 @@ namespace MyCadTools
             if (pdr.Status == PromptStatus.OK) return pdr.Value;
             throw new MyGeometrics.MyException("未知错误");
         }
-        private Point3d my_get_point(string prompt)
+        public static Point3d my_get_point(string prompt)
         {
             PromptPointOptions ppo = new PromptPointOptions(prompt);
             ppo.AllowNone = false;
@@ -1146,7 +1180,7 @@ namespace MyCadTools
             if (ppr.Status == PromptStatus.OK) return ppr.Value;
             throw new MyGeometrics.MyException("未知错误");
         }
-        private Point3d my_get_point(string prompt, Point3d bp)
+        public static Point3d my_get_point(string prompt, Point3d bp)
         {
             PromptPointOptions ppo = new PromptPointOptions(prompt);
             ppo.AllowNone = false;
@@ -1158,7 +1192,7 @@ namespace MyCadTools
             throw new MyGeometrics.MyException("未知错误");
         }
 
-        private string my_get_string(string prompt)
+        public static string my_get_string(string prompt)
         {
             PromptStringOptions pso = new PromptStringOptions(prompt);
             pso.AllowSpaces = true;
@@ -1172,7 +1206,7 @@ namespace MyCadTools
         /// 获取用户拾取的对象
         /// </summary>
         /// <returns></returns>
-        private List<DBObject> my_select_objects()
+        public static List<DBObject> my_select_objects()
         {
             Database db = HostApplicationServices.WorkingDatabase;
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
@@ -1208,7 +1242,7 @@ namespace MyCadTools
         /// <param name="layername"></param>
         /// <param name="al"></param>
         /// <returns></returns>
-        public bool select_all_objects_on_layer(string layername,out List<DBObject> al)
+        public static bool select_all_objects_on_layer(string layername,out List<DBObject> al)
         {
             al = new List<DBObject>();
             Database db = HostApplicationServices.WorkingDatabase;
