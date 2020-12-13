@@ -581,6 +581,7 @@ namespace MyCadTools
             public MyGeometrics.Vector3D qidian;
             public MyGeometrics.Vector3D zongdian;
             public double measurement;
+            public string layername = "";
             public MyDim(DBObject o)
             {
                 this.dbo = o;
@@ -590,12 +591,14 @@ namespace MyCadTools
                     this.qidian = t.XLine1Point.toVector3D();
                     this.zongdian = t.XLine2Point.toVector3D();
                     this.measurement = t.Measurement;
+                    this.layername = t.Layer;
                 }else if(o is AlignedDimension)
                 {
                     AlignedDimension t = (AlignedDimension)o;
                     this.qidian = t.XLine1Point.toVector3D();
                     this.zongdian = t.XLine2Point.toVector3D();
                     this.measurement = t.Measurement;
+                    this.layername = t.Layer;
                 }
                 else
                 {
@@ -670,7 +673,7 @@ namespace MyCadTools
             public string name="";
             public double area = 0.0;
             public MyGeometrics.Vector3D direction;
-
+            public double length = 0.0;//图上全长
 
 
             /// <summary>
@@ -722,6 +725,13 @@ namespace MyCadTools
                 return MyBridge.read_bridge_info_from_text(this.qiaoming.TextString, out this.name, out this.area);
             }
 
+            public void calc_length()
+            {
+                foreach (MyDim item in this.chain)
+                {
+                    this.length += item.measurement;
+                }
+            }
 
             /// <summary>
             /// 从用地文字中生成桥名和用地面积
@@ -745,13 +755,13 @@ namespace MyCadTools
             }
         }
 
-        [CommandMethod("mytest")]
-        public void mytest()
+        [CommandMethod("yongdi")]
+        public void yongdi()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
             //读取配置文件‘
-            ed.WriteMessage("正在读取配置文件...\n");
+            ed.WriteMessage("正在读取配置文件...\n" + Environment.NewLine);
             string excelFilePath = @"C:\用地类别配置.xlsx";
             Microsoft.Office.Interop.Excel.Application _excelApp = new Microsoft.Office.Interop.Excel.Application();
             _excelApp.Visible = false;
@@ -769,9 +779,9 @@ namespace MyCadTools
             //get an object array of all of the cells in the worksheet (their values)
             object[,] valueArray = (object[,])excelRange.get_Value(
                         Excel.XlRangeValueDataType.xlRangeValueDefault);
-            string qname = (string)valueArray[1, 2];
+            string qname = (string)valueArray[1, 2];//text所在图层名
             double dist_tol = (double)valueArray[2, 2];
-            double dist_gap = (double)valueArray[3, 2];
+            double dist_gap = (double)valueArray[3, 2];//依次是：连续标注容许距离：小于这个值被认为是一座桥；间隙距离：超过这个值，被认为是两座桥
             int num_of_areatype = Convert.ToInt32(valueArray[10, 2]);
             List<string> areatypes = new List<string>();
             for (int i = 0; i < num_of_areatype; i++)
@@ -843,7 +853,7 @@ namespace MyCadTools
             if (!al.Contains(first))
             {
                 al.Add(first);
-                ed.WriteMessage("自动向所有标注列表中加入首个标注");
+                ed.WriteMessage("自动向所有标注列表中加入首个标注" + Environment.NewLine);
             }
 
             //把dbobject放入mydim中
@@ -901,7 +911,7 @@ namespace MyCadTools
             {
                 chains.Add(cur_chain);
             }
-            ed.WriteMessage(string.Format("一共找到{0:D}个桥。\n", chains.Count));
+            ed.WriteMessage(string.Format("一共找到{0:D}个桥。\n" + Environment.NewLine, chains.Count));
 
 
             //生成mybridge
@@ -913,6 +923,7 @@ namespace MyCadTools
                 br.chain = item;
                 br.calc_rect();
                 br.calc_direction();
+                br.calc_length();
                 bridges.Add(br);
             }
 
@@ -958,15 +969,15 @@ namespace MyCadTools
                     bridges_unmatch.Add(item);
                 }
             }
-            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n", bridges_match.Count,bridges_unmatch.Count));
-            ed.WriteMessage("打印未匹配上桥的text：\n");
+            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n" + Environment.NewLine, bridges_match.Count,bridges_unmatch.Count));
+            //ed.WriteMessage("打印未匹配上桥的text：\n");
             foreach (DBText item in lst_text)
             {
-                ed.WriteMessage(string.Format("{0}：\n",item.TextString));
+                ed.WriteMessage(string.Format("未匹配上桥的text->{0}：\n" + Environment.NewLine, item.TextString));
             }
 
             //计算桥名和面积
-            ed.WriteMessage("计算桥名和面积...\n");
+            ed.WriteMessage("计算桥名和面积...\n" + Environment.NewLine);
             int ct = 0;
             List<MyBridge> bridges1 = new List<MyBridge>();
             foreach (MyBridge item in bridges_match)
@@ -975,18 +986,73 @@ namespace MyCadTools
                 {
                     ct += 1;
                     bridges1.Add(item);
-                    ed.WriteMessage(string.Format("无法生成桥名和面积：{0}\n", item.qiaoming.TextString));
+                    ed.WriteMessage(string.Format("无法生成桥名和面积：{0}\n" + Environment.NewLine, item.qiaoming.TextString));
                 }
             }
             foreach (MyBridge item in bridges1)
             {
                 bridges_match.Remove(item);//删去生成桥名和面积失败的
             }
-            ed.WriteMessage(string.Format("{0:D}个桥成功生成桥名信息，{1:D}个桥失败。\n", bridges_match.Count, bridges1.Count));
-
+            ed.WriteMessage(string.Format("{0:D}个桥成功生成桥名信息，{1:D}个桥失败。\n" + Environment.NewLine, bridges_match.Count, bridges1.Count));
+            ed.UpdateScreen();
 
 
             //计算各类用地
+            ed.WriteMessage("开始汇总各桥用地...\n" + Environment.NewLine);
+            MyDataStructure.FlatDataModel fdm_result = new MyDataStructure.FlatDataModel();//用于统计结果
+            fdm_result.vn.Add("桥名");
+            fdm_result.vn.Add("面积");
+            fdm_result.vn.Add("图上长度");
+            foreach (string item in areatypes)
+            {
+                fdm_result.vn.Add(item);
+            }
+            foreach (MyBridge item in bridges_match)
+            {
+                MyDataStructure.FlatDataModel fdmt = new MyDataStructure.FlatDataModel();//用于统计各类用地
+                fdmt.vn.Add("用地类别");
+                fdmt.vn.Add("测量长度");
+                fdmt.vn.Add("面积");
+                foreach (MyDim thisdim in item.chain)
+                {
+                    MyDataStructure.DataUnit duthis = new MyDataStructure.DataUnit(fdmt);
+                    duthis.data.Add("用地类别", thisdim.layername);
+                    duthis.data.Add("测量长度", thisdim.measurement);
+                    duthis.data.Add("面积", thisdim.measurement/item.length*item.area);
+                    fdmt.units.Add(duthis);
+                }
+                //汇总这个桥
+                MyDataStructure.FLHZ_OPERATION flhz1 = new MyDataStructure.FLHZ_OPERATION();
+                flhz1.fieldname = "面积";
+                flhz1.func = MyDataStructure.MyStatistic.sum;
+                MyDataStructure.FlatDataModel fdmt1 = fdmt.flhz(new List<string>() { "用地类别" },flhz1);
+                //写入到统计结果中
+                MyDataStructure.DataUnit du = new MyDataStructure.DataUnit(fdm_result);
+                du.data.Add("桥名", item.name);
+                du.data.Add("图上长度", item.length);
+                du.data.Add("面积", item.area);
+                foreach (string tp in areatypes)
+                {
+                    MyDataStructure.DataUnit du1 = fdmt1.find_one(delegate (MyDataStructure.DataUnit a)
+                      {
+                          if (tp ==(string)a.data["用地类别"])
+                          {
+                              return true;
+                          }
+                          return false;
+                      });
+                    if (du1==null)//没有找到这个用地类型 即：这个桥没有这个用地类型
+                    {
+                        du.data.Add(tp, 0.0);
+                    }
+                    else//找到了
+                    {
+                        du.data.Add(tp, du1.data["面积"]);
+                    }
+                }
+                fdm_result.units.Add(du);
+            }
+
 
             //输出结果
             MyDataStructure.FlatDataModel fdm = new MyDataStructure.FlatDataModel();
@@ -998,10 +1064,22 @@ namespace MyCadTools
                 du.data.Add("面积", item.area);
                 fdm.units.Add(du);
             }
-            fdm.show_in_excel();
-            double a = 1.0;
+            fdm_result.show_in_excel();
+            ed.WriteMessage("命令完成。\n");
+
         }
 
+
+
+        [CommandMethod("MYTEST")]
+        public void mytest()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+            ed.WriteMessage("发现一条未配对的直线"+Environment.NewLine);
+            ed.UpdateScreen();
+            System.Threading.Thread.Sleep(5000);//睡眠500毫秒，也就是0.5秒
+            ed.WriteMessage("结束\n");
+        }
         /// <summary>
         /// 修改既有线的两个端点
         /// </summary>
@@ -1125,7 +1203,7 @@ namespace MyCadTools
         }
 
         /// <summary>
-        /// 所在图层所有对象
+        /// 选取图层所有对象
         /// </summary>
         /// <param name="layername"></param>
         /// <param name="al"></param>
@@ -1159,6 +1237,10 @@ namespace MyCadTools
             SelectionFilter filter = new SelectionFilter(values);// 过滤器
             PromptSelectionResult psr = ed.SelectAll(filter);//选择所有
             SelectionSet SS = psr.Value;
+            if (psr.Status!=PromptStatus.OK)//没有完成筛选，原因很多，这里直接结束了
+            {
+                return false;
+            }
             using (Transaction trans = db.TransactionManager.StartTransaction())
             {
                 //foreach (CrossingOrWindowSelectedObject item in SS)
@@ -1237,11 +1319,11 @@ namespace MyCadTools
                 else
                 {
                     ed.WriteMessage("图层名已存在。\n");
-                    return true;
+                    return false;
                 }
             }
 
-            return false;
+            
         }
 
         /// <summary>
