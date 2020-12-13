@@ -6,7 +6,7 @@ using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-
+using Excel = Microsoft.Office.Interop.Excel;
 namespace MyCadTools
 {
 
@@ -669,6 +669,7 @@ namespace MyCadTools
             public MyGeometrics.MyRect rect;
             public string name="";
             public double area = 0.0;
+            public MyGeometrics.Vector3D direction;
 
 
 
@@ -707,6 +708,15 @@ namespace MyCadTools
                 this.rect = new MyGeometrics.MyRect(new MyGeometrics.Vector3D(minx, miny), new MyGeometrics.Vector3D(maxx, maxy));
             }
 
+            /// <summary>
+            /// 计算本桥大致的走向
+            /// chain必须已经赋值
+            /// </summary>
+            public void calc_direction()
+            {
+                this.direction = this.chain[this.chain.Count - 1].zongdian - this.chain[0].qidian;
+            }
+
             public bool read_text()
             {
                 return MyBridge.read_bridge_info_from_text(this.qiaoming.TextString, out this.name, out this.area);
@@ -739,13 +749,56 @@ namespace MyCadTools
         public void mytest()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-            List<DBObject> al = my_select_objects();
-            double dist_tol = my_get_double("请输入容许距离\n");//小于这个距离被认为是相连的 即同一座桥
-            double dist_gap = my_get_double("请输入间隙距离\n");//大于这个距离被认为是连2座桥 ，介于这两个距离之间的 会抛出错误
-            ed.WriteMessage("选择桥名对象\n");
-            List<DBObject> lst_text1 = my_select_objects();
-            List<DBText> lst_text = new List<DBText>();
+
+            //读取配置文件‘
+            ed.WriteMessage("正在读取配置文件...\n");
+            string excelFilePath = @"C:\用地类别配置.xlsx";
+            Microsoft.Office.Interop.Excel.Application _excelApp = new Microsoft.Office.Interop.Excel.Application();
+            _excelApp.Visible = false;
+            object oMissiong = System.Reflection.Missing.Value;
+            Excel.Workbook workbook = _excelApp.Workbooks.Open(excelFilePath, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong,
+            oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong);
+            Excel.Sheets sheets = workbook.Worksheets;
+            Excel.Worksheet worksheet = (Excel.Worksheet)sheets[1];//获取第一个表
+            if (worksheet == null)
+            {
+                ed.WriteMessage("读取配置文件失败，命令结束。\n");
+            }
+            //find the used range in worksheet
+            Microsoft.Office.Interop.Excel.Range excelRange = worksheet.UsedRange;
+            //get an object array of all of the cells in the worksheet (their values)
+            object[,] valueArray = (object[,])excelRange.get_Value(
+                        Excel.XlRangeValueDataType.xlRangeValueDefault);
+            string qname = (string)valueArray[1, 2];
+            double dist_tol = (double)valueArray[2, 2];
+            double dist_gap = (double)valueArray[3, 2];
+            int num_of_areatype = Convert.ToInt32(valueArray[10, 2]);
+            List<string> areatypes = new List<string>();
+            for (int i = 0; i < num_of_areatype; i++)
+            {
+                string thisstr = (string)valueArray[11 + i, 2];
+                areatypes.Add(thisstr);
+            }
+            //clean up stuffs
+            workbook.Close(false, Type.Missing, Type.Missing);
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+            _excelApp.Quit();
+            System.Runtime.InteropServices.Marshal.FinalReleaseComObject(_excelApp);
+
+
+
+
+            
+
+
             //收集桥名
+            List<DBObject> lst_text1 ;
+            if(!select_all_objects_on_layer(qname,out lst_text1))
+            {
+                ed.WriteMessage(string.Format("不存在图层{0},命令结束。\n", qname));
+                return;
+            }
+            List<DBText> lst_text = new List<DBText>();
             foreach (DBObject item in lst_text1)
             {
                 if (item is DBText)
@@ -755,6 +808,18 @@ namespace MyCadTools
             }
 
 
+            //收集标注
+            List<DBObject> al = new List<DBObject>(); //标注数组
+            foreach (string item in areatypes)
+            {
+                List<DBObject> lst_objs;
+                select_all_objects_on_layer(item, out lst_objs);
+                foreach (DBObject oo in lst_objs)
+                {
+                    al.Add(oo);
+                }
+
+            }
             List<int> alt = new List<int>();
             for (int i = 0; i < al.Count; i++)
             {
@@ -767,8 +832,6 @@ namespace MyCadTools
             {
                 al.RemoveAt(alt[i]);
             }
-           
-            
             ed.WriteMessage(string.Format("一共找到{0:D}个标注。\n", al.Count));
 
 
@@ -849,6 +912,7 @@ namespace MyCadTools
                 br = new MyBridge();
                 br.chain = item;
                 br.calc_rect();
+                br.calc_direction();
                 bridges.Add(br);
             }
 
@@ -859,10 +923,24 @@ namespace MyCadTools
             DBText text_match = null;
             foreach (MyBridge item in bridges)
             {
+                //以起点 桥方向为新坐标系
+                MyGeometrics.TransforamtionFunction tf = new MyGeometrics.TransforamtionFunction(item.chain[0].qidian, item.direction.calc_angle_in_xoy());
+                //计算终点在新坐标系下的坐标
+                double zdx = tf.trans(item.chain[item.chain.Count - 1].zongdian).x;
                 foreach (DBText text in lst_text)
                 {
+                    //首先使用原始坐标系判断是否能匹配上
                     if (item.rect.contain(text.Position.toVector3D()))
                     {//匹配上了
+                        item.qiaoming = text;
+                        bridges_match.Add(item);
+                        text_match = text;
+                        break;
+                    }
+                    //再使用局部坐标系匹配
+                    double x_text = tf.trans(text.Position.toVector3D()).x;//计算text在新坐标系下的位置
+                    if (x_text>0 && x_text<zdx)
+                    {
                         item.qiaoming = text;
                         bridges_match.Add(item);
                         text_match = text;
@@ -907,6 +985,8 @@ namespace MyCadTools
             ed.WriteMessage(string.Format("{0:D}个桥成功生成桥名信息，{1:D}个桥失败。\n", bridges_match.Count, bridges1.Count));
 
 
+
+            //计算各类用地
 
             //输出结果
             MyDataStructure.FlatDataModel fdm = new MyDataStructure.FlatDataModel();
@@ -1042,6 +1122,55 @@ namespace MyCadTools
                 }
             }
             return al;
+        }
+
+        /// <summary>
+        /// 所在图层所有对象
+        /// </summary>
+        /// <param name="layername"></param>
+        /// <param name="al"></param>
+        /// <returns></returns>
+        public bool select_all_objects_on_layer(string layername,out List<DBObject> al)
+        {
+            al = new List<DBObject>();
+            Database db = HostApplicationServices.WorkingDatabase;
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+            //判断图层是否存在
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                //打开层表
+                LayerTable lt = (LayerTable)trans.GetObject(db.LayerTableId, OpenMode.ForRead);
+                //判断指定的名是否存在
+                if (!lt.Has(layername))
+                {
+
+                    return false;
+                }
+            }
+
+
+            TypedValue[] values = new TypedValue[]
+            {
+                new TypedValue((int)DxfCode.LayerName, layername),
+               // new TypedValue((int)DxfCode.Start,"")
+            };
+
+            SelectionFilter filter = new SelectionFilter(values);// 过滤器
+            PromptSelectionResult psr = ed.SelectAll(filter);//选择所有
+            SelectionSet SS = psr.Value;
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                //foreach (CrossingOrWindowSelectedObject item in SS)
+                foreach (SelectedObject item in SS)
+                {
+                    DBObject ent = trans.GetObject(item.ObjectId, OpenMode.ForRead);
+                    al.Add(ent);
+                    //ed.WriteMessage("{0}->{1}", ent.Bounds.Value.MinPoint.ToString(), ent.Bounds.Value.MaxPoint.ToString());
+
+                }
+            }
+            return true;
         }
     }
     public static partial class AddEntityTools
