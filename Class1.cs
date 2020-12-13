@@ -5,11 +5,12 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace MyCadTools
 {
 
-
+    
 
     public class  Class1
     {
@@ -511,8 +512,8 @@ namespace MyCadTools
 
 
 
-        [CommandMethod("mytest")]
-        public void mytest()
+        [CommandMethod("sc01")]
+        public void sc01()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
             List<DBObject> al = my_select_objects();
@@ -569,6 +570,357 @@ namespace MyCadTools
 
         }
 
+
+
+
+
+        public class MyDim
+        {
+            public double dist;//用于计算和上一个标注的距离
+            public DBObject dbo;
+            public MyGeometrics.Vector3D qidian;
+            public MyGeometrics.Vector3D zongdian;
+            public double measurement;
+            public MyDim(DBObject o)
+            {
+                this.dbo = o;
+                if (o is RotatedDimension)
+                {
+                    RotatedDimension t = (RotatedDimension)o;
+                    this.qidian = t.XLine1Point.toVector3D();
+                    this.zongdian = t.XLine2Point.toVector3D();
+                    this.measurement = t.Measurement;
+                }else if(o is AlignedDimension)
+                {
+                    AlignedDimension t = (AlignedDimension)o;
+                    this.qidian = t.XLine1Point.toVector3D();
+                    this.zongdian = t.XLine2Point.toVector3D();
+                    this.measurement = t.Measurement;
+                }
+                else
+                {
+                    throw new MyGeometrics.MyException("意外错误，遭遇了一个既不是AlignedDimension也不是RotatedDimension的标注。");
+                }
+
+            }
+
+            public static bool operator ==(MyDim a,MyDim b)
+            {
+                return a.dbo.ObjectId == b.dbo.ObjectId;
+            }
+            public static bool operator !=(MyDim a, MyDim b)
+            {
+                return !(a.dbo.ObjectId == b.dbo.ObjectId);
+            }
+            public override bool Equals(object obj)
+            {
+                if(obj is not MyDim)
+                {
+                    return false;
+                }
+                MyDim other = (MyDim)obj;
+                return this == other;
+            }
+
+            public override string ToString()
+            {
+                return string.Format("测量值{0:1F}=起点{1}->终点{2}", this.measurement, this.qidian.ToString(), this.zongdian.ToString()); ;
+            }
+
+
+            /// <summary>
+            /// 这个标注的占用空间
+            /// </summary>
+            /// <returns></returns>
+            public MyGeometrics.MyRect rect()
+            {
+                double minx,maxx;
+                if (this.qidian.x<this.zongdian.x)
+                {
+                    minx = this.qidian.x;
+                    maxx = this.zongdian.x;
+                }
+                else
+                {
+                    minx = this.zongdian.x;
+                    maxx= this.qidian.x;
+                }
+                double miny, maxy;
+                if (this.qidian.y < this.zongdian.y)
+                {
+                    miny = this.qidian.y;
+                    maxy = this.zongdian.y;
+                }
+                else
+                {
+                    miny = this.zongdian.y;
+                    maxy = this.qidian.y;
+                }
+
+                return new MyGeometrics.MyRect(new MyGeometrics.Vector3D(minx, miny), new MyGeometrics.Vector3D(maxx, maxy));
+            }
+        }
+
+
+        class MyBridge
+        {
+            public List<MyDim> chain;
+            public DBText qiaoming;
+            public MyGeometrics.MyRect rect;
+            public string name="";
+            public double area = 0.0;
+
+
+
+            /// <summary>
+            /// 从chain中计算自己的方框
+            /// 
+            /// </summary>
+            public void calc_rect()
+            {
+                double minx, miny, maxx, maxy;
+                minx = this.chain[0].rect().leftright.x;
+                maxx = this.chain[0].rect().rightup.x;
+                miny = this.chain[0].rect().leftright.y;
+                maxy = this.chain[0].rect().rightup.y;
+
+                double x, y;
+                MyGeometrics.MyRect mr;
+                List<object> xs = new List<object>();
+                List<object> ys = new List<object>();
+                for (int i = 0; i < this.chain.Count; i++)
+                {
+                    mr = this.chain[i].rect();
+                    x = mr.leftright.x;
+                    y = mr.leftright.y;
+                    xs.Add(x);
+                    ys.Add(y);
+                    x = mr.rightup.x;
+                    y = mr.rightup.y;
+                    xs.Add(x);
+                    ys.Add(y);
+                }
+                minx = (double)MyDataStructure.MyStatistic.min(xs);
+                maxx = (double)MyDataStructure.MyStatistic.max(xs);
+                miny = (double)MyDataStructure.MyStatistic.min(ys);
+                maxy = (double)MyDataStructure.MyStatistic.max(ys);
+                this.rect = new MyGeometrics.MyRect(new MyGeometrics.Vector3D(minx, miny), new MyGeometrics.Vector3D(maxx, maxy));
+            }
+
+            public bool read_text()
+            {
+                return MyBridge.read_bridge_info_from_text(this.qiaoming.TextString, out this.name, out this.area);
+            }
+
+
+            /// <summary>
+            /// 从用地文字中生成桥名和用地面积
+            /// "嘻嘻桥哈1.5哈桥 桥梁用地： 1.23 亩ad";
+            /// </summary>
+            /// <param name="text"></param>
+            /// <param name="bg_name"></param>
+            /// <param name="area"></param>
+            /// <returns></returns>
+            public static bool read_bridge_info_from_text(string text, out string bg_name, out double area)
+            {
+                Match m;
+                bg_name = ""; area = 0.0;
+                m = Regex.Match(text, @"[\u4e00-\u9fa5\d?\.?]+桥\s+");
+                if (!m.Success) return false;
+                bg_name = m.Value;
+                m = Regex.Match(text, @"(\d+\.?\d*)(?=\s*亩)");
+                if (!m.Success ) return false;
+                area = Convert.ToDouble(m.Value);
+                return true;
+            }
+        }
+
+        [CommandMethod("mytest")]
+        public void mytest()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+            List<DBObject> al = my_select_objects();
+            double dist_tol = my_get_double("请输入容许距离\n");//小于这个距离被认为是相连的 即同一座桥
+            double dist_gap = my_get_double("请输入间隙距离\n");//大于这个距离被认为是连2座桥 ，介于这两个距离之间的 会抛出错误
+            ed.WriteMessage("选择桥名对象\n");
+            List<DBObject> lst_text1 = my_select_objects();
+            List<DBText> lst_text = new List<DBText>();
+            //收集桥名
+            foreach (DBObject item in lst_text1)
+            {
+                if (item is DBText)
+                {
+                    lst_text.Add((DBText)item);
+                }
+            }
+
+
+            List<int> alt = new List<int>();
+            for (int i = 0; i < al.Count; i++)
+            {
+                if (al[i] is not Dimension)
+                {
+                    alt.Add(i);
+                }
+            }
+            for (int i = alt.Count-1; i >-1; i--)
+            {
+                al.RemoveAt(alt[i]);
+            }
+           
+            
+            ed.WriteMessage(string.Format("一共找到{0:D}个标注。\n", al.Count));
+
+
+            //开始计算分组
+            ed.WriteMessage(string.Format("请选择首个标注：。\n", al.Count));
+            List<DBObject> fi = my_select_objects();
+            DBObject first = fi[0];
+            //检查是否在选择的所有标注中
+            if (!al.Contains(first))
+            {
+                al.Add(first);
+                ed.WriteMessage("自动向所有标注列表中加入首个标注");
+            }
+
+            //把dbobject放入mydim中
+            List<MyDim> dims = new List<MyDim>();
+            foreach (DBObject item in al)
+            {
+                dims.Add(new MyDim(item));
+            }
+            MyDim firstdim = new MyDim(first);
+
+            List<List<MyDim>> chains = new List<List<MyDim>>();//连续的（同一个桥的）mydim
+
+            //计算距离 分组
+            MyDim head = firstdim;
+            dims.Remove(head);
+            List<MyDim> cur_chain = new List<MyDim>();
+            cur_chain.Add(head);
+            while (dims.Count>0)
+            {
+                //计算到head的距离
+                foreach (MyDim item in dims)
+                {
+                    item.dist = (item.qidian - head.zongdian).norm;
+                }
+                //排序
+                dims.Sort((x, y) => x.dist.CompareTo(y.dist));
+                //取出来第一个
+                MyDim nearest = dims[0];
+                if (nearest.dist<dist_tol)//连续的
+                {
+                    cur_chain.Add(nearest);
+                    dims.RemoveAt(0);
+                    head = nearest;
+                }
+                else if(nearest.dist<dist_gap)
+                {
+                    ed.WriteMessage(string.Format("发现与上一个标注距离为{0:2F}的标注\n", nearest.dist));
+                    ed.WriteMessage("该标注信息\n");
+                    ed.WriteMessage(nearest.ToString());
+                    ed.WriteMessage("\n发生错误而结束");
+                    return;
+                }
+                else//下一作桥
+                {
+                    chains.Add(cur_chain);
+                    cur_chain = new List<MyDim>();
+                    cur_chain.Add(nearest);
+                    head = nearest;
+                    dims.RemoveAt(0);
+                }
+
+                
+            }
+            if (cur_chain.Count!=0)
+            {
+                chains.Add(cur_chain);
+            }
+            ed.WriteMessage(string.Format("一共找到{0:D}个桥。\n", chains.Count));
+
+
+            //生成mybridge
+            List<MyBridge> bridges = new List<MyBridge>();
+            MyBridge br;
+            foreach (List<MyDim> item in chains)
+            {
+                br = new MyBridge();
+                br.chain = item;
+                br.calc_rect();
+                bridges.Add(br);
+            }
+
+            //匹配bridge和text
+            //以bridge为基准
+            List<MyBridge> bridges_match = new List<MyBridge>();
+            List<MyBridge> bridges_unmatch = new List<MyBridge>();
+            DBText text_match = null;
+            foreach (MyBridge item in bridges)
+            {
+                foreach (DBText text in lst_text)
+                {
+                    if (item.rect.contain(text.Position.toVector3D()))
+                    {//匹配上了
+                        item.qiaoming = text;
+                        bridges_match.Add(item);
+                        text_match = text;
+                        break;
+                    }
+                }
+                if (text_match != null)
+                {
+                    lst_text.Remove(text_match);//删除已经匹配的
+                    text_match = null;
+                }
+                else
+                {
+                    //没有匹配上
+                    bridges_unmatch.Add(item);
+                }
+            }
+            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n", bridges_match.Count,bridges_unmatch.Count));
+            ed.WriteMessage("打印未匹配上桥的text：\n");
+            foreach (DBText item in lst_text)
+            {
+                ed.WriteMessage(string.Format("{0}：\n",item.TextString));
+            }
+
+            //计算桥名和面积
+            ed.WriteMessage("计算桥名和面积...\n");
+            int ct = 0;
+            List<MyBridge> bridges1 = new List<MyBridge>();
+            foreach (MyBridge item in bridges_match)
+            {
+                if(!item.read_text())
+                {
+                    ct += 1;
+                    bridges1.Add(item);
+                    ed.WriteMessage(string.Format("无法生成桥名和面积：{0}\n", item.qiaoming.TextString));
+                }
+            }
+            foreach (MyBridge item in bridges1)
+            {
+                bridges_match.Remove(item);//删去生成桥名和面积失败的
+            }
+            ed.WriteMessage(string.Format("{0:D}个桥成功生成桥名信息，{1:D}个桥失败。\n", bridges_match.Count, bridges1.Count));
+
+
+
+            //输出结果
+            MyDataStructure.FlatDataModel fdm = new MyDataStructure.FlatDataModel();
+            fdm.vn = new List<string>() { "桥名", "面积" };
+            foreach (MyBridge item in bridges_match)
+            {
+                MyDataStructure.DataUnit du = new MyDataStructure.DataUnit(fdm);
+                du.data.Add("桥名", item.name);
+                du.data.Add("面积", item.area);
+                fdm.units.Add(du);
+            }
+            fdm.show_in_excel();
+            double a = 1.0;
+        }
 
         /// <summary>
         /// 修改既有线的两个端点
@@ -780,7 +1132,9 @@ namespace MyCadTools
         {
             return MyGeometrics.Line3D.make_line_by_2_points(elo.StartPoint.toVector3D(), elo.EndPoint.toVector3D());
         }
+
     }
+
 
 
     public static class MyMethods
@@ -965,6 +1319,13 @@ namespace MyCadTools
             }
 
         }
+
+
+        public static List<DBObject> GetAllObjectsOnLayer()
+        {
+            return null;
+        }
+
 
         public static Dictionary<char, string> dic_arab_num_2_chinese_num = new Dictionary<char, string>();
 

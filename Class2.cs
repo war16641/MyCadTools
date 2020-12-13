@@ -387,4 +387,40 @@ namespace MyGeometrics
                                s * v.x + c * v.y + this.p.y);
         }
     }
+
+    public class MyRect
+    {
+        public Vector3D leftright;
+        public Vector3D rightup;
+        public MyRect(Vector3D lr, Vector3D ru)
+        {
+            this.leftright = lr;
+            this.rightup = ru;
+        }
+        public Vector3D center
+        {
+            get
+            {
+                return (this.rightup + this.leftright) * 0.5;
+            }
+        }
+
+        /// <summary>
+        /// 判断点是否在内部
+        /// </summary>
+        /// <param name="v"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v)
+        {
+            double tol = 0.0;
+            if (v.x >= this.leftright.x - tol && v.x <= this.rightup.x + tol)
+            {
+                if (v.y >= this.leftright.y - tol && v.y <= this.rightup.y + tol)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
 }
