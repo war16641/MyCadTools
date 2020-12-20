@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Excel = Microsoft.Office.Interop.Excel;
+using MGO = MyGeometrics;
 namespace MyCadTools
 {
 
@@ -1073,12 +1074,74 @@ namespace MyCadTools
 
         public static class mytest1
         {
+
+            
+
+
+            public class MileageLabelPair
+            {
+                public DBText text;
+                public Line elo;
+                public double lc;//在多段线上长度坐标
+
+                public bool calc_lc(MGO.Polyline pl)
+                {
+                    this.lc = -1;
+                    double t;int t1;
+                    bool b=pl.contain(this.elo.StartPoint.toVector3D(), 1e-2,out this.lc, out t,out t1);
+                    if (!b)
+                    {
+                        this.lc = -1;
+                        return false;
+                    }
+                    return true;
+                }
+
+            }
+
+            [CommandMethod("myt1")]
+            public static void Mytest1()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+
+                List<DBObject> al = my_select_objects();
+                DBObject o = al[0];
+                Polyline pl;
+                pl = (Polyline)o;
+                MGO.Polyline mpl = pl.toPolyline();
+                Point3d p = my_get_point("选择点：");
+                ed.WriteMessage(mpl.contain(p.toVector3D(), 1e-3).ToString());
+                //mpl.add_to_modelspace(HostApplicationServices.WorkingDatabase);
+            }
+
             [CommandMethod("mytest")]
             public static void mytest()
             {
                 Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+
+
+                List<DBObject> al = my_select_objects();
+                DBObject o = al[0];
+                Polyline pl;
+                pl = (Polyline)o;
+                MGO.Polyline mpl = pl.toPolyline();
+                //Point3d p = my_get_point("选择点：");
+                //ed.WriteMessage(mpl.contain(p.toVector3D(), 1e-3).ToString());
+                //mpl.add_to_modelspace(HostApplicationServices.WorkingDatabase);
+
+
+
+
+
+
+
+
+
+
+
                 string layername = my_get_string("输入图层名：");
-                List<DBObject> al;
+                al.Clear();
                 if (!select_all_objects_on_layer(layername, out al))
                 {
                     return;
@@ -1090,7 +1153,7 @@ namespace MyCadTools
                     if (item is Line)
                     {
                         Line elo = (Line)item;
-                        if (3.1 < elo.Length && elo.Length < 3.2)
+                        if (0.99 * 3.2 < elo.Length && elo.Length < 1.01 * 3.2)
                         {
                             lines.Add((Line)item);
                         }
@@ -1108,6 +1171,73 @@ namespace MyCadTools
                 //开始匹配
                 double dist_tol = 10.0;//小于这个距离认为是一对
                 double angle_tol = 1.0 / 180.0 * 3.14159;//小于这个角度才可能是一对
+                List<MileageLabelPair> mlps = new List<MileageLabelPair>();
+                //以线为准
+                List<Line> lines_unmatch = new List<Line>();
+                foreach (var item in lines)
+                {
+                    lines_unmatch.Add(item);
+                }
+                List<DBText> texts_unmatch = new List<DBText>();
+                foreach (var item in texts)
+                {
+                    texts_unmatch.Add(item);
+                }
+                foreach (Line line in lines)
+                {
+                    List<DBText> texts_pos = new List<DBText>();//可能的text
+                    //检查条件 加入可能与line配对的text
+                    foreach (DBText text in texts_unmatch)
+                    {
+                        if (Math.Abs(MyGeometrics.Vector3D.equivalent_angle(text.Rotation - line.Angle)) < angle_tol)
+                        {
+                            if ((line.EndPoint.toVector3D() - text.Position.toVector3D()).norm < dist_tol)
+                            {
+                                texts_pos.Add(text);
+                            }
+                        }
+                    }
+                    if (texts_pos.Count == 0)
+                    {
+                        ed.WriteMessage("发现未匹配的直线。\n");
+                        continue;
+                    }
+                    else if (texts_pos.Count > 1)
+                    {
+                        //发现多个可能的text，用最近的text
+                        texts_pos.Sort(delegate (DBText a, DBText b)
+                        {
+                            double t1 = (a.Position.toVector3D() - line.EndPoint.toVector3D()).norm;
+                            double t2 = (b.Position.toVector3D() - line.EndPoint.toVector3D()).norm;
+                            if (t1 > t2) return 1;
+                            return -1;
+                        });
+                    }
+
+                    //开始生成mileage label pair
+                    MileageLabelPair mlp = new MileageLabelPair();
+                    mlp.elo = line;
+                    mlp.text = texts_pos[0];
+                    mlps.Add(mlp);
+
+                    texts_unmatch.Remove(mlp.text);
+                }
+                ed.WriteMessage(string.Format("匹配了{0:D}个里程标\n", mlps.Count));
+
+                //计算lc
+                foreach (MileageLabelPair item in mlps)
+                {
+                    if (!item.calc_lc(mpl))
+                    {
+                        ed.WriteMessage(string.Format("发现不在线路多段线上的里程标：{0}\n", item.text.TextString));
+                    }
+                }
+
+                //显示
+                foreach (MileageLabelPair item in mlps)
+                {
+                    edit_text(string.Format("{0:f0}", item.lc), item.text);
+                }
 
             }
         }
@@ -1218,6 +1348,10 @@ namespace MyCadTools
 
             SelectionFilter filter = new SelectionFilter(values);// 过滤器
             PromptSelectionResult psr = ed.GetSelection();//参数为空 代表无筛选
+            if (psr.Status != PromptStatus.OK)
+            {
+                throw new MyGeometrics.MyException("用户取消了选择。");
+            }
             SelectionSet SS = psr.Value;
 
             List<DBObject> al = new List<DBObject>();
@@ -1378,6 +1512,73 @@ namespace MyCadTools
             return MyGeometrics.Line3D.make_line_by_2_points(elo.StartPoint.toVector3D(), elo.EndPoint.toVector3D());
         }
 
+        public static MGO.Polyline toPolyline(this Polyline pl)//把cad的polyline转化为自己的polyline
+        {
+            MGO.Polyline mpl = new MGO.Polyline();
+            for (int i = 0; i < pl.NumberOfVertices - 1; i++)
+            {
+                SegmentType st = pl.GetSegmentType(i);
+                if (st == SegmentType.Line)
+                {
+                    LineSegment3d elo = pl.GetLineSegmentAt(i);
+                    mpl.segs.Add(MyGeometrics.LineSegment.make_lineseg_by_2_points(elo.StartPoint.toVector3D(), elo.EndPoint.toVector3D()));
+
+                }
+                else if (st == SegmentType.Arc)
+                {
+                    CircularArc3d ca = pl.GetArcSegmentAt(i);
+                    //需要更具normal来生成arc
+                    if (Math.Abs(ca.Normal.Z-1)<1e-6)//正向
+                    {
+                        mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.StartPoint.toVector3D(), ca.EndPoint.toVector3D()));
+                    }
+                    else
+                    {
+                        //逆向
+                        mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.EndPoint.toVector3D(), ca.StartPoint.toVector3D()));
+                    }
+                    
+                    //mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(),ca.Radius,ca.StartAngle,ca)
+                }
+                else if (st == SegmentType.Coincident)
+                {
+                    continue;
+                }
+                else
+                {
+                    throw new MyGeometrics.MyException("创建多段线错误：未知的类型");
+                }
+            }
+            return mpl;
+        }
+
+        public static void add_to_modelspace(this MGO.LineSegment elo, Database db)
+        {
+            Line line = new Line(elo.p1.toPoint3d(),elo.p2.toPoint3d());
+            db.AddEntityToModelSpace(line);
+
+        }
+
+        public static void add_to_modelspace(this MGO.Polyline pl, Database db)
+        {
+            for (int i = 0; i < pl.num_of_segs; i++)
+            {
+                if (pl.segs[i] is MGO.LineSegment)
+                {
+                    MGO.LineSegment elo = (MGO.LineSegment)pl.segs[i];
+                    elo.add_to_modelspace(db);
+                }
+                else if (pl.segs[i] is MGO.MyArc)
+                {
+                    ((MGO.MyArc)pl.segs[i]).add_to_modelspace(db);
+                }
+            }
+        }
+        public static void add_to_modelspace(this MGO.MyArc ma, Database db)
+        {
+            Arc a = new Arc(ma.center.toPoint3d(), ma.radius, ma.theta1, ma.theta2);
+            db.AddEntityToModelSpace(a);
+        }
     }
 
 

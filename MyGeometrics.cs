@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace MyGeometrics
 {
@@ -18,6 +19,13 @@ namespace MyGeometrics
         }
     }
 
+    public interface Imygeometrics
+    {
+        bool contain(Vector3D a, double b);
+        bool contain(Vector3D a, double b, out double c);
+        double length { get; }
+
+    }
 
     public class Vector3D
     {
@@ -297,6 +305,23 @@ namespace MyGeometrics
 
         }
 
+        /// <summary>
+        /// 将一个角度转移到[0,2PI)的区间上
+        /// 
+        /// </summary>
+        /// <param name="angle"></param>
+        /// <returns></returns>
+        public static double equivalent_angle1(double angle)
+        {
+            double t = Vector3D.equivalent_angle(angle);
+            if (t < 0)
+            {
+                return t + 2 * Math.PI;
+            }
+            return t;
+
+        }
+
 
         /// <summary>
         /// 获取向量在另外一个向量上的投影
@@ -352,6 +377,260 @@ namespace MyGeometrics
 
 
     /// <summary>
+    /// 线段
+    /// </summary>
+    public class LineSegment : Line3D, Imygeometrics
+    {
+        public Vector3D p1;
+        public Vector3D p2;
+        public TransforamtionFunction tf = null;
+
+        public double length//线段长度
+        {
+            get
+            {
+                return (p2 - p1).norm;
+            }
+        }
+        public LineSegment() { }
+
+
+        public LineSegment(Vector3D v1, Vector3D v2)
+        {
+            this.basepoint = v1;
+            this.direction = v2 - v1;
+            this.p1 = v1;
+            this.p2 = v2;
+            //设置tf
+            this.tf = new TransforamtionFunction(v1, this.angle);
+        }
+        /// <summary>
+        /// 使用两个点创建线段
+        /// </summary>
+        /// <param name="v1"></param>
+        /// <param name="v2"></param>
+        /// <returns></returns>
+        public static LineSegment make_lineseg_by_2_points(Vector3D v1, Vector3D v2)
+        {
+            Line3D elo = new Line3D(v1, v2 - v1);
+            LineSegment rt = new LineSegment();
+            rt.basepoint = elo.basepoint;
+            rt.direction = elo.direction;
+            rt.p1 = v1.get_copy();
+            rt.p2 = v2.get_copy();
+            //设置tf
+            rt.tf = new TransforamtionFunction(v1, elo.angle);
+            return rt;
+        }
+
+
+        /// <summary>
+        /// 判断点是否在线段上
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol = 1e-6)
+        {
+            //看是不是在直线上
+            double dist1 = v.distance_to_line(this);
+            if (dist1 > tol) return false;
+            //看点是否在线段内
+            Vector3D v1 = this.tf.trans(v);
+            if (v1.x > -tol && v1.x < this.length + tol)//允许有个小误差
+            {
+                return true;
+            }
+            return false;
+        }
+
+
+        /// <summary>
+        /// 计算v在线段上的长度坐标
+        /// 长度坐标：标识v在线段上的位置
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <param name="lc"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol, out double lc)
+        {
+            bool b = this.contain(v, tol);
+            lc = -1;
+            if (!b)
+            {
+                return b;
+            }
+            //在直线上 计算长度坐标
+            lc = (v - this.p1).norm;
+            return b;
+        }
+
+    }
+
+
+    public class MyArc : Imygeometrics
+    {
+        public Vector3D center;
+        public double radius;
+        public double theta1;
+        public double theta2;
+        public MyArc(Vector3D center, double radius, double theta1, double theta2)
+        {
+            //if (theta2 <= theta1)
+            //{
+            //    throw new MyException("要求theta2大于theta1");
+            //}
+            this.center = center.get_copy();
+            this.radius = radius;
+            this.theta1 = theta1;
+            this.theta2 = theta2;
+        }
+
+
+        /// <summary>
+        ///圆心-端点-端点
+        ///第二个端点可以不再圆上
+        /// </summary>
+        /// <param name="center"></param>
+        /// <param name="p1"></param>
+        /// <param name="p2"></param>
+        public MyArc(Vector3D center, Vector3D p1, Vector3D p2) :
+            this(center, (p1 - center).norm, (p1 - center).calc_angle_in_xoy(), (p2 - center).calc_angle_in_xoy())
+        {
+
+        }
+        /// <summary>
+        /// 判断点是否在弧上
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol = 1e-6)
+        {
+            TransformationFunctionPolar tf = new TransformationFunctionPolar(
+                this.center,
+                0);
+            Vector3D v1 = tf.trans(v);
+            if (Math.Abs(v1.y - this.radius) > tol) return false;
+
+            //
+            this.theta1 = Vector3D.equivalent_angle1(this.theta1);
+            this.theta2 = Vector3D.equivalent_angle1(this.theta2);
+            v1.x = Vector3D.equivalent_angle1(v1.x);
+            if (this.theta2 > this.theta1)
+            {
+                return (this.theta1 < v1.x + tol && v1.x - tol < this.theta2);
+            }
+            else
+            {
+                double t1 = 0.0;
+                double t2 = this.theta2 - this.theta1;
+                t2 = Vector3D.equivalent_angle1(t2);
+                double t = Vector3D.equivalent_angle1(v1.x - this.theta1);
+                return t < t2 + tol;
+            }
+
+        }
+
+
+        /// <summary>
+        /// 计算v在线段上的长度坐标
+        /// 长度坐标：标识v在线段上的位置
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <param name="lc"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol, out double lc)
+        {
+            bool b = this.contain(v, tol);
+            lc = -1;
+            if (!b)
+            {
+                return b;
+            }
+            //在弧上 计算长度坐标
+            double theta = Vector3D.equivalent_angle1((v - this.center).calc_angle_in_xoy() - this.theta1);
+            lc = theta * this.radius;
+            return b;
+
+
+        }
+
+        public double length
+        {
+            get
+            {
+                return this.radius * Vector3D.equivalent_angle1(this.theta2 - this.theta1);
+            }
+        }
+    }
+
+
+    public class Polyline
+    {
+        public List<Imygeometrics> segs = new List<Imygeometrics>();
+        public int num_of_segs
+        {
+            get
+            {
+                return this.segs.Count;
+            }
+        }
+
+        /// <summary>
+        /// 点是否在多段线上
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol = 1e-6)
+        {
+            for (int i = 0; i < this.segs.Count; i++)
+            {
+                if (this.segs[i].contain(v, tol))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+
+        /// <summary>
+        /// 判断点是否在多段线上
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="tol"></param>
+        /// <param name="lc">长度坐标</param>
+        /// <param name="lc1">对应seg的 长度坐标</param>
+        /// <param name="id">对应seg的id</param>
+        /// <returns></returns>
+        public bool contain(Vector3D v, double tol, out double lc, out double lc1, out int id)
+        {
+            lc = -1;
+            lc1 = -1;
+            id = -1;
+            double lcc = 0.0;
+            for (int i = 0; i < this.segs.Count; i++)
+            {
+                if (this.segs[i].contain(v, tol, out lc1))
+                {
+                    id = i;
+                    lc = lcc + lc1;
+                    return true;
+                }
+                lcc += this.segs[i].length;
+            }
+            return false;
+        }
+
+
+
+    }
+
+    /// <summary>
     /// 坐标系变换
     /// 先平移 后旋转（逆时针）
     /// 只是xoy平面内的变化
@@ -385,6 +664,51 @@ namespace MyGeometrics
             double c = Math.Cos(this.theta);
             return new Vector3D(c * v.x - s * v.y + this.p.x,
                                s * v.x + c * v.y + this.p.y);
+        }
+    }
+
+
+
+    /// <summary>
+    /// 极坐标
+    /// 也是先平移 后旋转
+    /// </summary>
+    public class TransformationFunctionPolar
+    {
+        public double theta;
+        public Vector3D p;
+        public TransformationFunctionPolar(Vector3D v, double theta)
+        {
+            this.p = v.get_copy();
+            this.theta = theta;
+        }
+
+        /// <summary>
+        /// 计算新坐标系下坐标
+        /// 使用vector返回 x为角度 y为半径
+        /// </summary>
+        /// <param name="v"></param>
+        /// <returns></returns>
+        public Vector3D trans(Vector3D v)
+        {
+            //先计算半径
+            double x = v.x - this.p.x;
+            double y = v.y - this.p.y;
+            double rou = Math.Sqrt(x * x + y * y);
+
+            //在计算角度
+            double theta = (new Vector3D(x, y)).calc_angle_in_xoy();
+
+            //返回 角度和半径
+            return new Vector3D(theta - this.theta, rou);
+        }
+
+        public Vector3D itrans(Vector3D v)
+        {
+            double theta1 = v.x + this.theta;
+            double x = v.y * Math.Cos(theta1);
+            double y = v.y * Math.Sin(theta1);
+            return new Vector3D(x + this.p.x, y + this.p.y);
         }
     }
 
