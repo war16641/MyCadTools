@@ -23,7 +23,9 @@ namespace MyGeometrics
     {
         bool contain(Vector3D a, double b);
         bool contain(Vector3D a, double b, out double c);
+        Vector3D calc_nearest_point(Vector3D a, out bool b, out double lc, double d);
         double length { get; }
+        Vector3D center { get; }//中心点
 
     }
 
@@ -385,6 +387,14 @@ namespace MyGeometrics
         public Vector3D p2;
         public TransforamtionFunction tf = null;
 
+
+        public Vector3D center
+        {
+            get
+            {
+                return (p1 + p2) * 0.5;
+            }
+        }
         public double length//线段长度
         {
             get
@@ -466,22 +476,38 @@ namespace MyGeometrics
             return b;
         }
 
+        public Vector3D calc_nearest_point(Vector3D v, out bool flag_in, out double lc, double tol = 1e-6)
+        {
+            Vector3D rt;
+            v.distance_to_line(this, out rt);
+            lc = (this.p1 - rt).norm;
+            flag_in = this.contain(rt, tol);
+            return rt;
+        }
+
     }
 
 
     public class MyArc : Imygeometrics
     {
-        public Vector3D center;
+        public Vector3D _center;
         public double radius;
         public double theta1;
         public double theta2;
+        public Vector3D center
+        {
+            get
+            {
+                return this._center;
+            }
+        }
         public MyArc(Vector3D center, double radius, double theta1, double theta2)
         {
             //if (theta2 <= theta1)
             //{
             //    throw new MyException("要求theta2大于theta1");
             //}
-            this.center = center.get_copy();
+            this._center = center.get_copy();
             this.radius = radius;
             this.theta1 = theta1;
             this.theta2 = theta2;
@@ -509,7 +535,7 @@ namespace MyGeometrics
         public bool contain(Vector3D v, double tol = 1e-6)
         {
             TransformationFunctionPolar tf = new TransformationFunctionPolar(
-                this.center,
+                this._center,
                 0);
             Vector3D v1 = tf.trans(v);
             if (Math.Abs(v1.y - this.radius) > tol) return false;
@@ -551,7 +577,7 @@ namespace MyGeometrics
                 return b;
             }
             //在弧上 计算长度坐标
-            double theta = Vector3D.equivalent_angle1((v - this.center).calc_angle_in_xoy() - this.theta1);
+            double theta = Vector3D.equivalent_angle1((v - this._center).calc_angle_in_xoy() - this.theta1);
             lc = theta * this.radius;
             return b;
 
@@ -564,6 +590,20 @@ namespace MyGeometrics
             {
                 return this.radius * Vector3D.equivalent_angle1(this.theta2 - this.theta1);
             }
+        }
+
+        public Vector3D calc_nearest_point(Vector3D v, out bool flag_in, out double lc, double tol = 1e-6)
+        {
+            TransformationFunctionPolar tf = new TransformationFunctionPolar(
+                this._center,
+                0);
+            Vector3D zb = tf.trans(v);
+            Vector3D n = new Vector3D(zb.x, this.radius);
+            lc = Vector3D.equivalent_angle1(n.x - this.theta1) * this.radius;
+            Vector3D rt = tf.itrans(n);
+            flag_in = this.contain(rt, tol);
+            return rt;
+
         }
     }
 
@@ -624,6 +664,37 @@ namespace MyGeometrics
                 lcc += this.segs[i].length;
             }
             return false;
+        }
+
+        public Vector3D calc_nearest_point(Vector3D v, out bool flag_in, out double lc, out int id, double tol = 1e-6)
+        {
+            lc = 0.0;
+
+            Imygeometrics cur;
+            double llc;
+            Vector3D nearest_point;
+            for (int i = 0; i < this.num_of_segs; i++)
+            {
+                cur = this.segs[i];
+                nearest_point = cur.calc_nearest_point(v, out flag_in, out llc, tol);
+                if (flag_in)
+                {
+                    //找到了
+                    lc += llc;
+                    id = i;
+                    return nearest_point;
+                }
+                else
+                {
+                    lc += cur.length;
+                }
+
+            }
+            flag_in = false;
+            lc = -1;
+            id = -1;
+            return new Vector3D(0, 0, 0);
+
         }
 
 

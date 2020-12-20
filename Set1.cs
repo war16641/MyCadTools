@@ -675,6 +675,8 @@ namespace MyCadTools
             public double area = 0.0;
             public MyGeometrics.Vector3D direction;
             public double length = 0.0;//图上全长
+            public double lc_qidian=0.0;
+            public double lc_zongdian=0.0;//桥的起止里程
 
 
             /// <summary>
@@ -753,6 +755,13 @@ namespace MyCadTools
                 if (!m.Success ) return false;
                 area = Convert.ToDouble(m.Value);
                 return true;
+            }
+
+
+            public void calc_lc(mytest1.RailwayRoute rr)
+            {
+                this.lc_qidian=rr.get_mileage_at_point(this.chain[0].qidian);
+                this.lc_zongdian = rr.get_mileage_at_point(this.chain[this.chain.Count - 1].zongdian);
             }
         }
 
@@ -1070,7 +1079,336 @@ namespace MyCadTools
 
         }
 
+        [CommandMethod("yongdi1")]
+        public static void yongdi1()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
+            //读取配置文件‘
+            ed.WriteMessage("正在读取配置文件...\n" + Environment.NewLine);
+            string excelFilePath = @"C:\用地类别配置.xlsx";
+            Microsoft.Office.Interop.Excel.Application _excelApp = new Microsoft.Office.Interop.Excel.Application();
+            _excelApp.Visible = false;
+            object oMissiong = System.Reflection.Missing.Value;
+            Excel.Workbook workbook = _excelApp.Workbooks.Open(excelFilePath, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong,
+            oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong, oMissiong);
+            Excel.Sheets sheets = workbook.Worksheets;
+            Excel.Worksheet worksheet = (Excel.Worksheet)sheets[1];//获取第一个表
+            if (worksheet == null)
+            {
+                ed.WriteMessage("读取配置文件失败，命令结束。\n");
+            }
+            //find the used range in worksheet
+            Microsoft.Office.Interop.Excel.Range excelRange = worksheet.UsedRange;
+            //get an object array of all of the cells in the worksheet (their values)
+            object[,] valueArray = (object[,])excelRange.get_Value(
+                        Excel.XlRangeValueDataType.xlRangeValueDefault);
+            string qname = (string)valueArray[1, 2];//text所在图层名
+            double dist_tol = (double)valueArray[2, 2];
+            double dist_gap = (double)valueArray[3, 2];//依次是：连续标注容许距离：小于这个值被认为是一座桥；间隙距离：超过这个值，被认为是两座桥
+            int num_of_areatype = Convert.ToInt32(valueArray[10, 2]);
+            List<string> areatypes = new List<string>();
+            for (int i = 0; i < num_of_areatype; i++)
+            {
+                string thisstr = (string)valueArray[11 + i, 2];
+                areatypes.Add(thisstr);
+            }
+            //clean up stuffs
+            workbook.Close(false, Type.Missing, Type.Missing);
+            System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook);
+            _excelApp.Quit();
+            System.Runtime.InteropServices.Marshal.FinalReleaseComObject(_excelApp);
+
+
+
+
+
+
+
+            //收集桥名
+            List<DBObject> lst_text1;
+            if (!select_all_objects_on_layer(qname, out lst_text1))
+            {
+                ed.WriteMessage(string.Format("不存在图层{0},命令结束。\n", qname));
+                return;
+            }
+            List<DBText> lst_text = new List<DBText>();
+            foreach (DBObject item in lst_text1)
+            {
+                if (item is DBText)
+                {
+                    lst_text.Add((DBText)item);
+                }
+            }
+
+
+            //收集标注
+            List<DBObject> al = new List<DBObject>(); //标注数组
+            foreach (string item in areatypes)
+            {
+                List<DBObject> lst_objs;
+                select_all_objects_on_layer(item, out lst_objs);
+                foreach (DBObject oo in lst_objs)
+                {
+                    al.Add(oo);
+                }
+
+            }
+            List<int> alt = new List<int>();
+            for (int i = 0; i < al.Count; i++)
+            {
+                if (al[i] is not Dimension)
+                {
+                    alt.Add(i);
+                }
+            }
+            for (int i = alt.Count - 1; i > -1; i--)
+            {
+                al.RemoveAt(alt[i]);
+            }
+            ed.WriteMessage(string.Format("一共找到{0:D}个标注。\n", al.Count));
+
+
+            //开始计算分组
+            ed.WriteMessage(string.Format("请选择首个标注：。\n", al.Count));
+            List<DBObject> fi = my_select_objects();
+            DBObject first = fi[0];
+            //检查是否在选择的所有标注中
+            if (!al.Contains(first))
+            {
+                al.Add(first);
+                ed.WriteMessage("自动向所有标注列表中加入首个标注" + Environment.NewLine);
+            }
+
+            //把dbobject放入mydim中
+            List<MyDim> dims = new List<MyDim>();
+            foreach (DBObject item in al)
+            {
+                dims.Add(new MyDim(item));
+            }
+            MyDim firstdim = new MyDim(first);
+
+            List<List<MyDim>> chains = new List<List<MyDim>>();//连续的（同一个桥的）mydim
+
+            //计算距离 分组
+            MyDim head = firstdim;
+            dims.Remove(head);
+            List<MyDim> cur_chain = new List<MyDim>();
+            cur_chain.Add(head);
+            while (dims.Count > 0)
+            {
+                //计算到head的距离
+                foreach (MyDim item in dims)
+                {
+                    item.dist = (item.qidian - head.zongdian).norm;
+                }
+                //排序
+                dims.Sort((x, y) => x.dist.CompareTo(y.dist));
+                //取出来第一个
+                MyDim nearest = dims[0];
+                if (nearest.dist < dist_tol)//连续的
+                {
+                    cur_chain.Add(nearest);
+                    dims.RemoveAt(0);
+                    head = nearest;
+                }
+                else if (nearest.dist < dist_gap)
+                {
+                    ed.WriteMessage(string.Format("发现与上一个标注距离为{0:2F}的标注\n", nearest.dist));
+                    ed.WriteMessage("该标注信息\n");
+                    ed.WriteMessage(nearest.ToString());
+                    ed.WriteMessage("\n发生错误而结束");
+                    return;
+                }
+                else//下一作桥
+                {
+                    chains.Add(cur_chain);
+                    cur_chain = new List<MyDim>();
+                    cur_chain.Add(nearest);
+                    head = nearest;
+                    dims.RemoveAt(0);
+                }
+
+
+            }
+            if (cur_chain.Count != 0)
+            {
+                chains.Add(cur_chain);
+            }
+            ed.WriteMessage(string.Format("一共找到{0:D}个桥。\n" + Environment.NewLine, chains.Count));
+
+
+            //生成mybridge
+            List<MyBridge> bridges = new List<MyBridge>();
+            MyBridge br;
+            foreach (List<MyDim> item in chains)
+            {
+                br = new MyBridge();
+                br.chain = item;
+                br.calc_rect();
+                br.calc_direction();
+                br.calc_length();
+                bridges.Add(br);
+            }
+
+            //匹配bridge和text
+            //以bridge为基准
+            List<MyBridge> bridges_match = new List<MyBridge>();
+            List<MyBridge> bridges_unmatch = new List<MyBridge>();
+            DBText text_match = null;
+            foreach (MyBridge item in bridges)
+            {
+                //以起点 桥方向为新坐标系
+                MyGeometrics.TransforamtionFunction tf = new MyGeometrics.TransforamtionFunction(item.chain[0].qidian, item.direction.calc_angle_in_xoy());
+                //计算终点在新坐标系下的坐标
+                double zdx = tf.trans(item.chain[item.chain.Count - 1].zongdian).x;
+                foreach (DBText text in lst_text)
+                {
+                    //首先使用原始坐标系判断是否能匹配上
+                    if (item.rect.contain(text.Position.toVector3D()))
+                    {//匹配上了
+                        item.qiaoming = text;
+                        bridges_match.Add(item);
+                        text_match = text;
+                        break;
+                    }
+                    //再使用局部坐标系匹配
+                    double x_text = tf.trans(text.Position.toVector3D()).x;//计算text在新坐标系下的位置
+                    if (x_text > 0 && x_text < zdx)
+                    {
+                        item.qiaoming = text;
+                        bridges_match.Add(item);
+                        text_match = text;
+                        break;
+                    }
+                }
+                if (text_match != null)
+                {
+                    lst_text.Remove(text_match);//删除已经匹配的
+                    text_match = null;
+                }
+                else
+                {
+                    //没有匹配上
+                    bridges_unmatch.Add(item);
+                }
+            }
+            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n" + Environment.NewLine, bridges_match.Count, bridges_unmatch.Count));
+            //ed.WriteMessage("打印未匹配上桥的text：\n");
+            foreach (DBText item in lst_text)
+            {
+                ed.WriteMessage(string.Format("未匹配上桥的text->{0}：\n" + Environment.NewLine, item.TextString));
+            }
+
+            //计算桥名和面积
+            ed.WriteMessage("计算桥名和面积...\n" + Environment.NewLine);
+            int ct = 0;
+            List<MyBridge> bridges1 = new List<MyBridge>();
+            foreach (MyBridge item in bridges_match)
+            {
+                if (!item.read_text())
+                {
+                    ct += 1;
+                    bridges1.Add(item);
+                    ed.WriteMessage(string.Format("无法生成桥名和面积：{0}\n" + Environment.NewLine, item.qiaoming.TextString));
+                }
+            }
+            foreach (MyBridge item in bridges1)
+            {
+                bridges_match.Remove(item);//删去生成桥名和面积失败的
+            }
+            ed.WriteMessage(string.Format("{0:D}个桥成功生成桥名信息，{1:D}个桥失败。\n" + Environment.NewLine, bridges_match.Count, bridges1.Count));
+            ed.UpdateScreen();
+
+
+
+
+            //计算起止里程
+            mytest1.RailwayRoute rr = mytest1.RailwayRoute.make(ed);
+            foreach (var item in bridges_match)
+            {
+                item.calc_lc(rr);
+            }
+
+
+            //计算各类用地
+            ed.WriteMessage("开始汇总各桥用地...\n" + Environment.NewLine);
+            MyDataStructure.FlatDataModel fdm_result = new MyDataStructure.FlatDataModel();//用于统计结果
+            fdm_result.vn.Add("桥名");
+            fdm_result.vn.Add("面积");
+            fdm_result.vn.Add("图上长度");
+            fdm_result.vn.Add("起点里程");
+            fdm_result.vn.Add("终点里程");
+            foreach (string item in areatypes)
+            {
+                fdm_result.vn.Add(item);
+            }
+            foreach (MyBridge item in bridges_match)
+            {
+                MyDataStructure.FlatDataModel fdmt = new MyDataStructure.FlatDataModel();//用于统计各类用地
+                fdmt.vn.Add("用地类别");
+                fdmt.vn.Add("测量长度");
+                fdmt.vn.Add("面积");
+                foreach (MyDim thisdim in item.chain)
+                {
+                    MyDataStructure.DataUnit duthis = new MyDataStructure.DataUnit(fdmt);
+                    duthis.data.Add("用地类别", thisdim.layername);
+                    duthis.data.Add("测量长度", thisdim.measurement);
+                    duthis.data.Add("面积", thisdim.measurement / item.length * item.area);
+                    fdmt.units.Add(duthis);
+                }
+                //汇总这个桥
+                MyDataStructure.FLHZ_OPERATION flhz1 = new MyDataStructure.FLHZ_OPERATION();
+                flhz1.fieldname = "面积";
+                flhz1.func = MyDataStructure.MyStatistic.sum;
+                MyDataStructure.FlatDataModel fdmt1 = fdmt.flhz(new List<string>() { "用地类别" }, flhz1);
+                //写入到统计结果中
+                MyDataStructure.DataUnit du = new MyDataStructure.DataUnit(fdm_result);
+                du.data.Add("桥名", item.name);
+                du.data.Add("图上长度", item.length);
+                du.data.Add("面积", item.area);
+                du.data.Add("起点里程", item.lc_qidian);
+                du.data.Add("终点里程", item.lc_zongdian);
+                foreach (string tp in areatypes)
+                {
+                    MyDataStructure.DataUnit du1 = fdmt1.find_one(delegate (MyDataStructure.DataUnit a)
+                    {
+                        if (tp == (string)a.data["用地类别"])
+                        {
+                            return true;
+                        }
+                        return false;
+                    });
+                    if (du1 == null)//没有找到这个用地类型 即：这个桥没有这个用地类型
+                    {
+                        du.data.Add(tp, 0.0);
+                    }
+                    else//找到了
+                    {
+                        du.data.Add(tp, du1.data["面积"]);
+                    }
+                }
+                fdm_result.units.Add(du);
+            }
+
+
+
+
+
+            //输出结果
+            MyDataStructure.FlatDataModel fdm = new MyDataStructure.FlatDataModel();
+            fdm.vn = new List<string>() { "桥名", "面积" };
+            foreach (MyBridge item in bridges_match)
+            {
+                MyDataStructure.DataUnit du = new MyDataStructure.DataUnit(fdm);
+                du.data.Add("桥名", item.name);
+                du.data.Add("面积", item.area);
+                fdm.units.Add(du);
+            }
+            fdm_result.show_in_excel();
+            ed.WriteMessage("命令完成。\n");
+
+        }
 
         public static class mytest1
         {
@@ -1078,7 +1416,7 @@ namespace MyCadTools
             
 
 
-            public class MileageLabelPair
+            public class MileageLabelPair//里程标 由text和短横线组成
             {
                 public DBText text;
                 public Line elo;
@@ -1099,19 +1437,81 @@ namespace MyCadTools
 
             }
 
+            public class RailwayRoute
+            {
+                public MGO.Polyline pl;
+                public double qidianlicheng;
+
+                /// <summary>
+                /// 生成一个rr， 需要用户配合
+                /// </summary>
+                /// <param name="ed"></param>
+                /// <returns></returns>
+                public static RailwayRoute make(Editor ed)
+                {
+                    RailwayRoute rr = new RailwayRoute();
+                    ed.WriteMessage("选择多段线：\n");
+                    List<DBObject> al = my_select_objects();
+                    MGO.Polyline polyline=null;
+                    foreach (var item in al)
+                    {
+                        if (item is Polyline)
+                        {
+                            polyline = ((Polyline)item).toPolyline();
+                            rr.pl = polyline;
+                            break;
+                        }
+                    }
+                    if (null==polyline)
+                    {
+                        ed.WriteMessage("未选择多段线，结束\n");
+                        return null;
+                    }
+                    //处理起点里程
+                    Point3d p = my_get_point("选择里程点：\n");
+                    double mil = my_get_double("输入里程：\n");
+                    double lc, lc1; int id;
+                    rr.pl.contain(p.toVector3D(), 1e-3, out lc, out lc1, out id);
+                    rr.qidianlicheng = mil - lc;
+                    return rr;
+                }
+
+                public double get_mileage_at_point(MGO.Vector3D v,double tol=1e-3)
+                {
+                    bool fi;
+                    double lc;
+                    int id;
+                    this.pl.calc_nearest_point(v, out fi, out lc, out id, tol);
+                    return lc+this.qidianlicheng;
+                }
+            }
+
             [CommandMethod("myt1")]
             public static void Mytest1()
             {
                 Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
 
-                List<DBObject> al = my_select_objects();
-                DBObject o = al[0];
-                Polyline pl;
-                pl = (Polyline)o;
-                MGO.Polyline mpl = pl.toPolyline();
-                Point3d p = my_get_point("选择点：");
-                ed.WriteMessage(mpl.contain(p.toVector3D(), 1e-3).ToString());
+                //List<DBObject> al = my_select_objects();
+                //DBObject o = al[0];
+                //Polyline pl;
+                //pl = (Polyline)o;
+                //MGO.Polyline mpl = pl.toPolyline();
+                //Point3d p = my_get_point("选择里程点：\n");
+                //double mil = my_get_double("输入里程：\n");
+                ////计算里程
+                //double lc, lc1;int id;
+                //mpl.contain(p.toVector3D(), 1e-3, out lc, out lc1, out id);
+                //double qidianlc = mil - lc;
+                //bool fi;
+                RailwayRoute rr= RailwayRoute.make(ed);
+                while (true)
+                {
+                    Point3d pp = my_get_point("选择点：\n");
+                    double mileage = rr.get_mileage_at_point(pp.toVector3D());
+                    ed.WriteMessage(string.Format("里程值为{0:F0}\n", mileage));
+                }
+                //ed.WriteMessage(mpl.contain(p.toVector3D(), 1e-3).ToString());
                 //mpl.add_to_modelspace(HostApplicationServices.WorkingDatabase);
             }
 
