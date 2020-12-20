@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Excel = Microsoft.Office.Interop.Excel;
 using MGO = MyGeometrics;
+using MBE = BRIDGEENGNEERING;
 namespace MyCadTools
 {
 
@@ -1079,6 +1080,10 @@ namespace MyCadTools
 
         }
 
+
+        /// <summary>
+        /// 这个加入计算台尾里程的功能
+        /// </summary>
         [CommandMethod("yongdi1")]
         public static void yongdi1()
         {
@@ -1476,6 +1481,67 @@ namespace MyCadTools
                     return rr;
                 }
 
+
+                public static RailwayRoute make1(Editor ed)
+                {
+                    RailwayRoute rr = new RailwayRoute();
+                    ed.WriteMessage("选择多段线：\n");
+                    List<DBObject> al = my_select_objects();
+                    MGO.Polyline polyline = null;
+                    foreach (var item in al)
+                    {
+                        if (item is Polyline)
+                        {
+                            polyline = ((Polyline)item).toPolyline();
+                            rr.pl = polyline;
+                            break;
+                        }
+                    }
+                    if (null == polyline)
+                    {
+                        throw new MGO.MyException("未选择多段线\n");
+                    }
+                    //选择里程标
+                    Line elo=null;
+                    DBText text = null; ;
+                    ed.WriteMessage("选择里程标（短横线和文字）：\n");
+                    al = my_select_objects();
+                    foreach (var item in al)
+                    {
+                        if (item is Line)
+                        {
+                            elo = (Line)item;
+                        }else if(item is DBText)
+                        {
+                            text = (DBText)item;
+                        }
+                    }
+                    if (null==elo || null==text)
+                    {
+                        throw new MGO.MyException("未选择里程标\n");
+
+                    }
+
+                    //开始处理
+                    double mil;
+                    if (!MBE.MyBridgeEngineering.read_mileage_from_text(text.TextString,out mil))
+                    {
+                        throw new MGO.MyException(string.Format("无法从{0}读取里程标\n",text.TextString));
+                    }
+
+                    rr.pl.contain(elo.StartPoint.toVector3D(), 1e-3, out double lc, out _, out _);
+                    rr.qidianlicheng = mil - lc;
+                    return rr;
+                }
+
+
+
+                /// <summary>
+                /// 从polyline'中计算里程
+                /// </summary>
+                /// <param name="v"></param>
+                /// <param name="tol"></param>
+                /// <returns></returns>
                 public double get_mileage_at_point(MGO.Vector3D v,double tol=1e-3)
                 {
                     bool fi;
@@ -1504,7 +1570,7 @@ namespace MyCadTools
                 //mpl.contain(p.toVector3D(), 1e-3, out lc, out lc1, out id);
                 //double qidianlc = mil - lc;
                 //bool fi;
-                RailwayRoute rr= RailwayRoute.make(ed);
+                RailwayRoute rr= RailwayRoute.make1(ed);
                 while (true)
                 {
                     Point3d pp = my_get_point("选择点：\n");
