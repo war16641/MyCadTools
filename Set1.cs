@@ -9,6 +9,8 @@ using System.Text.RegularExpressions;
 using Excel = Microsoft.Office.Interop.Excel;
 using MGO = MyGeometrics;
 using MBE = BRIDGEENGNEERING;
+using Group = Autodesk.AutoCAD.DatabaseServices.Group;
+
 namespace MyCadTools
 {
 
@@ -310,6 +312,8 @@ namespace MyCadTools
         [CommandMethod("zk")]
         public static void zk()
         {
+            Double target_angle = my_get_double("输入目标角度：");
+            target_angle = target_angle / 180.0 * 3.14159;
             List<DBObject> al = my_select_objects();
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
             List<Line> list_line = new List<Line>();//线的集合
@@ -345,8 +349,8 @@ namespace MyCadTools
 
             List<DBText> possible_list_text = new List<DBText>();
 
-            double dist1 = 2.5;
-            double dist2 = 0.5;//text参考点必须在直线内部，不能超过这个限值
+            double dist1 = 4;// 2.5;
+            double dist2 = 1;// 0.5;//text参考点必须在直线内部，不能超过这个限值
             double angle1 = 5.0 / 180.0 * Math.PI;//超过这个限值，不认为线和文字是一对
             foreach (Line elo in list_line)
             {
@@ -430,9 +434,10 @@ namespace MyCadTools
             //后续操作
             foreach (ZuanKong item in list_zk)
             {
-                item.rotate();
-                item.trim_line();
-                item.adjust_position_of_shengdu();
+                item.rotate(target_angle);
+                //item.scale(0.5);
+                //item.trim_line();
+                //item.adjust_position_of_shengdu();
 
             }
         }
@@ -486,6 +491,21 @@ namespace MyCadTools
 
             }
 
+            public void scale(double s = 0.5)
+            {
+
+                if (this.shengdu == null)
+                {
+                    MyMethods.ScaleEntity(this.geshixian.Id, this.geshixian.StartPoint, s);
+                    MyMethods.ScaleEntity(this.bianhao.Id, this.geshixian.StartPoint, s);
+                }
+                else
+                {
+                    MyMethods.ScaleEntity(this.geshixian.Id, this.geshixian.StartPoint, s);
+                    MyMethods.ScaleEntity(this.bianhao.Id, this.geshixian.StartPoint, s);
+                    MyMethods.ScaleEntity(this.shengdu.Id, this.geshixian.StartPoint, s);
+                }
+            }
 
             public void adjust_position_of_shengdu()
             {
@@ -1707,6 +1727,195 @@ namespace MyCadTools
 
             }
         }
+
+
+        public class Abutment
+        {
+
+            [CommandMethod("myt2")]
+            public static void test()
+            {
+                //Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                //Database db = HostApplicationServices.WorkingDatabase;
+                //ObjectId[] obs;
+                //Line elo1 = new Line(new Point3d(0, 0, 0), new Point3d(1, 1, 1));
+                //Line elo2 = new Line(new Point3d(0, 0, 0), new Point3d(1, 0, 0));
+                //obs =db.AddEntityToModelSpace(elo1,elo2);
+                //Group g = new Autodesk.AutoCAD.DatabaseServices.Group();
+                //g.Append(obs[0]);
+                //g.Append(obs[1]);
+                ////db.AddEntityToModelSpace(g.ObjectId);
+                //using (Transaction trans = db.TransactionManager.StartTransaction())
+                //{
+                //    Dictionary dic = db.GroupDictionaryId;
+                    
+                //    //打开表
+                //    //BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                //    Group bt = (Group)trans.GetObject(db.GroupDictionaryId, OpenMode.ForRead);
+                //    //打开表记录
+                //    BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                //    //加入记录
+                //    //for (int i = 0; i < ent.Length; i++)
+                //    //{
+                //    //    entId[i] = btr.AppendEntity(ent[i]);
+
+                //    //    //更新记录
+                //    //    trans.AddNewlyCreatedDBObject(ent[i], true);
+                //    //    //提交
+                //    //}
+                //    btr.AppendEntity((Entity)g);
+                    
+                //    trans.AddNewlyCreatedDBObject(g, true);
+                //    trans.Commit();
+                //}
+            }
+
+
+
+
+            /// <summary>
+            /// 计算椭圆上 角度为angle的点
+            /// </summary>
+            /// <param name="a"></param>
+            /// <param name="b"></param>
+            /// <param name="angle"></param>
+            /// <returns></returns>
+            public static MGO.Vector3D cacl_inner_points(double a,double b,double angle)
+            {
+                double x = Math.Sqrt(1.0 / (1.0 / (a*a)+Math.Tan(angle)* Math.Tan(angle)/b/b));
+                double y = x * Math.Tan(angle);
+                return new MGO.Vector3D(x, y);
+            }
+            [CommandMethod("abutment")]
+            public static void abutment()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                Database db = HostApplicationServices.WorkingDatabase;
+                Point3d center1 = my_get_point("选择台尾角点");
+                MGO.Vector3D center = center1.toVector3D();//中心点
+                string user_in = my_get_string("输入空格分隔的3个长度");
+                Match m = Regex.Match(user_in, @"(?<p1>\d+\.?\d*)\s+(?<p2>\d+\.?\d*)\s+(?<p3>\d+\.?\d*)");
+                if (m == null)
+                {
+                    ed.WriteMessage("非法的输入，结束\n");
+                    return;
+                }
+                double p1 = Convert.ToDouble(m.Groups["p1"].Value);
+                double p2 = Convert.ToDouble(m.Groups["p2"].Value);
+                double p3 = Convert.ToDouble(m.Groups["p3"].Value);
+                //double p1 = 5.0;
+                //double p2 = 1.0;
+                //double p3 = 3.0;
+                double y_to_x = 1.2;
+                MGO.Vector3D x1 =  new MGO.Vector3D(0, p1 * y_to_x);
+                Ellipse ellipse = new Ellipse();
+                ellipse.Set(
+                    center.toPoint3d(),     // Center
+                    new Vector3d(0, 0, 1),    // Normal
+                    x1.toVector3D(),  // Major Axis
+                    1.0 / y_to_x,                      // Radius radio
+                    Math.PI * 1.5,                        // Start Angle
+                    Math.PI * 2.0               // End Angle
+                );
+                db.AddEntityToModelSpace(ellipse);
+
+
+                MGO.Vector3D x2 = x1 + new MGO.Vector3D(0, p2, 0);//增量不保持这个比例
+                ellipse = new Ellipse();
+                ellipse.Set(
+                    center.toPoint3d(),     // Center
+                    new Vector3d(0, 0, 1),    // Normal
+                    x2.toVector3D(),  // Major Axis
+                    (p1+p2)/x2.y,                      // Radius radio
+                    Math.PI * 1.5,                        // Start Angle
+                    Math.PI * 2.0               // End Angle
+                );
+                db.AddEntityToModelSpace(ellipse);
+
+                MGO.Vector3D x3 = x2 + new MGO.Vector3D(0, p3 , 0);//增量不保持这个比例
+                ellipse = new Ellipse();
+                ellipse.Set(
+                    center.toPoint3d(),     // Center
+                    new Vector3d(0, 0, 1),    // Normal
+                    x3.toVector3D(),  // Major Axis
+                    (p1 + p2+p3) / x3.y,                      // Radius radio
+                    Math.PI * 1.5,                        // Start Angle
+                    Math.PI * 2.0               // End Angle
+                );
+                db.AddEntityToModelSpace(ellipse);
+
+                //锥体顶平台
+                MGO.Vector3D x0 =  new MGO.Vector3D(0, 0.75*y_to_x, 0);//增量不保持这个比例
+                ellipse = new Ellipse();
+                ellipse.Set(
+                    center.toPoint3d(),     // Center
+                    new Vector3d(0, 0, 1),    // Normal
+                    x0.toVector3D(),  // Major Axis
+                    1.0/y_to_x,                      // Radius radio
+                    Math.PI * 1.5,                        // Start Angle
+                    Math.PI * 2.0               // End Angle
+                );
+                db.AddEntityToModelSpace(ellipse);
+
+                //画边界
+                Line elo1 = new Line(center.toPoint3d(), new Point3d(center.x + p1 + p2 + p3,center.y,0));
+                Line elo2 = new Line(center.toPoint3d(), (center + x3).toPoint3d());
+                db.AddEntityToModelSpace(elo1, elo2);
+
+
+                //画边坡线 上面的
+                MGO.Vector3D v1, v2;
+                double perc = 0.85;//代表边坡线的长度 长的
+                double perc1 = 0.5;//短的
+                double perc2 = perc;
+
+
+                List<double> angles = new List<double> { 15, 30, 45, 60, 75 };
+                foreach (var item in angles)
+                {
+                    double alpha = item / 180.0 * Math.PI;
+                    v1 = center + Abutment.cacl_inner_points(0.75, 0.75 * y_to_x, alpha);
+                    v2 = center + Abutment.cacl_inner_points(p1 * perc2, p1 * y_to_x * perc2, alpha);
+                    db.AddEntityToModelSpace(new Line(v1.toPoint3d(), v2.toPoint3d()));
+                    if (perc2==perc)
+                    {
+                        perc2 = perc1;
+                    }
+                    else
+                    {
+                        perc2 = perc;
+                    }
+                }
+
+                //画下面的边坡
+                angles.Clear();
+                //angles.Add(12.5); angles.Add(25); angles.Add(37.5); angles.Add(50);
+                //angles.Add(62.5); angles.Add(75); angles.Add(87.5);
+                angles.Add(10.0); angles.Add(20.0); angles.Add(30.0); angles.Add(40.0);
+                angles.Add(50.0); angles.Add(60.0); angles.Add(70.0); angles.Add(80.0);
+                perc = 0.9;
+                perc1 = 0.8;
+                perc2 = perc;
+                foreach (var item in angles)
+                {
+                    double alpha = item / 180.0 * Math.PI;
+                    v1 = center + Abutment.cacl_inner_points(p1+p2, x2.y, alpha);
+                    v2 = center + Abutment.cacl_inner_points((p1 +p2+p3)*perc2, x3.y * perc2, alpha);
+                    db.AddEntityToModelSpace(new Line(v1.toPoint3d(), v2.toPoint3d()));
+                    if (perc2 == perc)
+                    {
+                        perc2 = perc1;
+                    }
+                    else
+                    {
+                        perc2 = perc;
+                    }
+                }
+
+                //Group g = new Autodesk.AutoCAD.DatabaseServices.Group();
+                
+            }
+        }
     
 
 
@@ -1898,12 +2107,14 @@ namespace MyCadTools
             {
                 //打开表
                 BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                
                 //打开表记录
                 BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 //加入记录
                 for (int i = 0; i < ent.Length; i++)
                 {
                     entId[i] = btr.AppendEntity(ent[i]);
+                    
                     //更新记录
                     trans.AddNewlyCreatedDBObject(ent[i], true);
                     //提交
@@ -1972,6 +2183,10 @@ namespace MyCadTools
         public static MyGeometrics.Vector3D toVector3D(this Point3d p)
         {
             return new MyGeometrics.Vector3D(p.X, p.Y, p.Z);
+        }
+        public static Vector3d toVector3D(this MGO.Vector3D v)
+        {
+            return new Vector3d(v.x, v.y, v.z);
         }
         public static MyGeometrics.Line3D toLine3D(this Line elo)
         {
@@ -2051,13 +2266,35 @@ namespace MyCadTools
 
     public static class MyMethods
     {
+
+        /// <summary>
+        /// 缩放图形 图形已经加到图形数据库中
+        /// </summary>
+        /// <param name="entId">图形对象的ObjectId</param>
+        /// <param name="basePoint">缩放的基点</param>
+        /// <param name="facter">缩放比例</param>
+        public static void ScaleEntity(this ObjectId entId, Point3d basePoint, double facter)
+        {
+            // 计算缩放矩阵
+            Matrix3d mt = Matrix3d.Scaling(facter, basePoint);
+            // 启动事务处理
+            using (Transaction trans = entId.Database.TransactionManager.StartTransaction())
+            {
+                // 打开要缩放的图形对象
+                Entity ent = (Entity)entId.GetObject(OpenMode.ForWrite);
+                ent.TransformBy(mt);
+                trans.Commit();
+            }
+        }
+
+
         /// <summary>
         /// 移动entity
         /// </summary>
         /// <param name="entId"></param>
         /// <param name="sourcePoint"></param>
         /// <param name="targetPoint"></param>
-        public  static void MoveEntity(ObjectId entId, Point3d sourcePoint, Point3d targetPoint)
+        public static void MoveEntity(ObjectId entId, Point3d sourcePoint, Point3d targetPoint)
         {
             // 打开当前图形数据库
             Database db = HostApplicationServices.WorkingDatabase;
