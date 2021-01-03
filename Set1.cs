@@ -1729,6 +1729,9 @@ namespace MyCadTools
         }
 
 
+        /// <summary>
+        /// 绘制平面图上的桥台
+        /// </summary>
         public class Abutment
         {
 
