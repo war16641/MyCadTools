@@ -73,8 +73,9 @@ namespace MyDataStructure
             }
             return cur;
         }
+
     }
-    public class DataUnit:ICloneable
+    public class DataUnit : ICloneable
     {
         public Dictionary<string, object> data = new Dictionary<string, object>();
         public FlatDataModel fdm;
@@ -110,15 +111,15 @@ namespace MyDataStructure
     }
 
 
-    public class FlatDataModelException: ApplicationException
+    public class FlatDataModelException : ApplicationException
     {
 
         public FlatDataModelException(string s) : base(s)
         {
-            
+
         }
     }
-    public class FlatDataModel : IEnumerable,ICloneable
+    public class FlatDataModel : IEnumerable, ICloneable
     {
         public List<DataUnit> units = new List<DataUnit>();
         public List<string> vn = new List<string>();//字段名
@@ -266,7 +267,7 @@ namespace MyDataStructure
         /// <param name="func"></param>
         /// <param name="index"></param>
         /// <returns></returns>
-        public DataUnit find_one(System.Func<DataUnit,bool> func,out int index)
+        public DataUnit find_one(System.Func<DataUnit, bool> func, out int index)
         {
             for (int i = 0; i < this.Count; i++)
             {
@@ -294,9 +295,9 @@ namespace MyDataStructure
         }
 
 
-        public void sort(System.Func<DataUnit, DataUnit,int> func)
+        public void sort(System.Func<DataUnit, DataUnit, int> func)
         {
-            this.units.Sort((x,y)=>func(x,y));
+            this.units.Sort((x, y) => func(x, y));
 
         }
 
@@ -315,7 +316,7 @@ namespace MyDataStructure
                 int t;
                 foreach (string key in keys)
                 {
-                    if(!(a.data[key] is IComparable))
+                    if (!(a.data[key] is IComparable))
                     {
                         throw new FlatDataModelException(string.Format("字段{0}未实现Icomparable"));
                     }
@@ -332,11 +333,11 @@ namespace MyDataStructure
             });
         }
 
-        public List<List<DataUnit>>  make_bunch(List<string> classifyname)
+        public List<List<DataUnit>> make_bunch(List<string> classifyname)
         {
             foreach (string item in classifyname)
             {
-                if(!this.vn.Contains(item))
+                if (!this.vn.Contains(item))
                 {
                     throw new System.ArgumentException("分类字段不在字段名中。");
                 }
@@ -347,7 +348,7 @@ namespace MyDataStructure
             this.sort(classifyname);
 
             //判断是否是同一个bunch
-            System.Func<DataUnit, DataUnit, bool> is_same_bunch = delegate(DataUnit a,DataUnit b) {
+            System.Func<DataUnit, DataUnit, bool> is_same_bunch = delegate (DataUnit a, DataUnit b) {
                 foreach (string n in classifyname)
                 {
 
@@ -368,7 +369,7 @@ namespace MyDataStructure
             DataUnit cur_bunch_name = this.units[0];//当前bunch
             foreach (DataUnit item in this)
             {
-                if (is_same_bunch(item,cur_bunch_name))
+                if (is_same_bunch(item, cur_bunch_name))
                 {
                     cur_bunch.Add(item);
                 }
@@ -381,7 +382,7 @@ namespace MyDataStructure
                     cur_bunch.Add(item);
                 }
             }
-            if (cur_bunch.Count>0)
+            if (cur_bunch.Count > 0)
             {
                 rt.Add(cur_bunch);
             }
@@ -407,11 +408,11 @@ namespace MyDataStructure
                 u.fdm = fdm;
                 fdm.units.Add(u);
             }
-            
+
             return fdm;
         }
 
-        public FlatDataModel flhz(List<string> classifynames,params FLHZ_OPERATION[] par)
+        public FlatDataModel flhz(List<string> classifynames, params FLHZ_OPERATION[] par)
         {
             FlatDataModel t_fdm = (FlatDataModel)this.Clone();
             List<List<DataUnit>> bunches = t_fdm.make_bunch(classifynames);
@@ -431,7 +432,7 @@ namespace MyDataStructure
 
             //开始统计
             FlatDataModel rt = new FlatDataModel();
-            
+
             foreach (List<DataUnit> thisbunch in bunches)
             {
                 //先写入classfynames
@@ -499,20 +500,20 @@ namespace MyDataStructure
         /// <param name="add_fields">添加字段</param>
         /// <param name="other_model">其他模型</param>
         /// <param name="default_value">默认值，在找不到对应dataunit的时候使用</param>
-        public void add_field_from_other_model(string link_field,string[] add_fields,FlatDataModel other_model,object default_value)
+        public void add_field_from_other_model(string link_field, string[] add_fields, FlatDataModel other_model, object default_value)
         {
             //检查字段名的合法性
-            if(!this.vn.Contains(link_field) ||!other_model.vn.Contains(link_field))
+            if (!this.vn.Contains(link_field) || !other_model.vn.Contains(link_field))
             {
                 throw new ArgumentException(string.Format("字段名{0}不存在。", link_field));
             }
             foreach (var item in add_fields)
             {
-                if(!other_model.vn.Contains(item))
+                if (!other_model.vn.Contains(item))
                 {
                     throw new ArgumentException(string.Format("字段名{0}不存在。", item));
                 }
-                if(this.vn.Contains(item))
+                if (this.vn.Contains(item))
                 {
                     throw new ArgumentException(string.Format("字段名{0}已经存在。", item));
                 }
@@ -522,12 +523,12 @@ namespace MyDataStructure
             foreach (DataUnit u in this)
             {
                 var umatch = other_model.find_one(delegate (DataUnit tu)
-                  {
-                      dynamic d1 = tu.data[link_field];
-                      dynamic d2 = u.data[link_field];
-                      return d1 == d2;
-                  });
-                if(null==umatch)
+                {
+                    dynamic d1 = tu.data[link_field];
+                    dynamic d2 = u.data[link_field];
+                    return d1 == d2;
+                });
+                if (null == umatch)
                 {
                     //没找到
                     foreach (string item in add_fields)
@@ -560,8 +561,130 @@ namespace MyDataStructure
         public string fieldname = "";//原字段名 也是被统计的字段
         public string newname = "";//新 字段名 空时=原字段名
         public Func<List<object>, object> func;//统计函数
-        
+
 
     }
+
+
+    public class UnamedClass
+    {
+
+
+
+
+
+        /// <summary>
+        /// 对一维数组中的数进行分类
+        /// </summary>
+        /// <param name="ary"></param>
+        /// <param name="groups"></param>
+        /// <param name="groups_id"></param>
+        /// <param name="span_of_isolate">分类的距离 可取1.0/类别数,此值越小类别越多</param>
+        /// <param name="num_of_cells">划分cell的数量，可取类别数*10,此值影响分类的准确性，小到一定值就行</param>
+        /// <returns></returns>
+        public static bool classify(List<double> ary,
+            out List<List<double>> groups,
+            out List<List<int>> groups_id,
+            double span_of_isolate = 0.3,
+            int num_of_cells = 100)
+        {
+            groups = new List<List<double>>();
+            groups_id = new List<List<int>>();
+            if (ary.Count == 0)
+            {
+                return false;
+            }
+            //归一化ary
+            List<object> al = new List<object>();
+            foreach (object item in ary)
+            {
+                al.Add(item);
+            }
+            double minv = (double)MyStatistic.min(al);
+            double maxv = (double)MyStatistic.max(al);
+            List<double> ary1 = new List<double>();//归一化后的数组
+            foreach (double item in ary)
+            {
+                ary1.Add((item - minv) / (maxv - minv));
+            }
+
+            //计算参数
+            int Nc = num_of_cells;
+            double Wc = 1.0 / Convert.ToDouble(Nc);
+            int[] pinshu = new int[Nc];//频数数组
+            for (int i = 0; i < Nc; i++)
+            {
+                pinshu[i] = 0;
+            }
+
+            //计算频数数组
+            foreach (double item in ary1)
+            {
+                for (int i = 0; i < Nc; i++)
+                {
+                    if (item <= (i + 1) * Wc)
+                    {
+                        pinshu[i] += 1;
+                        break;
+                    }
+                }
+            }
+
+            //计算分隔值
+            int Siso = (int)(span_of_isolate / Wc);
+            int last_zero = 0;
+            List<double> isolate_values = new List<double>();//存放分隔值
+            for (int i = 0; i < Nc; i++)
+            {
+                if (pinshu[i] > 0)
+                {
+                    if (i - last_zero > Siso)
+                    {
+                        //是分隔值
+                        isolate_values.Add((last_zero + 1) * Wc);
+                        last_zero = i + 1;
+                    }
+                    else
+                    {
+                        last_zero = i + 1;
+                    }
+                }
+            }
+
+            //利用计算得出的分隔值 分组
+
+            for (int i = 0; i < isolate_values.Count + 1; i++)
+            {
+                //groups的长度=分隔值+1
+                groups.Add(new List<double>());
+                groups_id.Add(new List<int>());
+            }
+            for (int i = 0; i < ary1.Count; i++)
+            {
+                double value = ary1[i];
+                for (int j = 0; j < isolate_values.Count; j++)
+                {
+                    if (value < isolate_values[j])
+                    {
+                        groups[j].Add(ary[i]);
+                        groups_id[j].Add(i);
+                        break;
+                    }
+                    else
+                    {
+                        if (j == isolate_values.Count - 1)
+                        {
+                            //由于分隔值始终会小于最大的value 这时候放到第count+1
+                            groups[isolate_values.Count].Add(ary[i]);
+                            groups_id[isolate_values.Count].Add(i);
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+
 
 }

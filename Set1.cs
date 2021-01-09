@@ -275,7 +275,7 @@ namespace MyCadTools
         /// 自动编号文字
         /// </summary>
         [CommandMethod("AutoNumbering")] // 添加命令标识符
-        public static void AutoNumbering()
+        public static void AutoNumbering_ori()
         {
 
             List<DBObject> al = my_select_objects();
@@ -307,6 +307,76 @@ namespace MyCadTools
             }
         }
 
+
+        public static class AutoNumbering
+        {
+            [CommandMethod("an1")]
+            public static void autonumbering1()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                ed.WriteMessage("选择文字对象\n");
+                List<DBObject> al = my_select_objects();
+                double span = my_get_double("输入分类跨度：\n");
+                string format = my_get_string("输入格式文字");
+                string funcname = my_get_string("输入函数名");
+                int offset = (int)my_get_double("输入偏移量");
+
+
+
+                List<DBText> texts = new List<DBText>();
+                
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText)
+                    {
+                        texts.Add((DBText)item);
+                    }
+                }
+                List<double> dbs = new List<double>();
+                foreach (DBText item in texts)
+                {
+                    dbs.Add(item.Position.Y*-1.0);
+                }
+                List<List<int>> group_ids = new List<List<int>>();
+                MyDataStructure.UnamedClass.classify(dbs, out _, out group_ids, span);
+
+                //text也按二级列表
+                List<List<DBText>> sorted_texts = new List<List<DBText>>();
+                foreach (List<int> item in group_ids)
+                {
+                    sorted_texts.Add(new List<DBText>());
+                    foreach (int id in item)
+                    {
+                        sorted_texts[sorted_texts.Count - 1].Add(texts[id]);
+                    }
+                }
+
+                //对每个子列表再按x坐标排序
+                for (int i = 0; i < sorted_texts.Count; i++)
+                {
+                    sorted_texts[i].Sort(delegate (DBText a, DBText b)
+                    {
+                        return a.Position.X.CompareTo(b.Position.X);
+                    });
+                }
+
+                //开始写text
+                int ii = 0;
+                foreach (List<DBText> item in sorted_texts)
+                {
+                    foreach (DBText tx in item)
+                    {
+                        edit_text(string.Format(format, 
+                            ForAutoNumbering.dic[funcname](ii + 1 + offset), 
+                            ForAutoNumbering.dic[funcname](texts.Count)),
+                            tx);
+                        ii += 1;
+                    }
+                }
+                
+                
+            }
+        }
 
 
         [CommandMethod("zk")]
