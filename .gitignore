@@ -23,3 +23,4 @@ obj/Debug/netstandard2.0/MyCadTools.csproj.CopyComplete
 bin/Debug/netstandard2.0/Microsoft.Office.Interop.Excel.dll
 bin/Debug/netstandard2.0/office.dll
 *.dwl
+*.dwl2
