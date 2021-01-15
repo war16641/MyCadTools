@@ -2118,6 +2118,12 @@ namespace MyCadTools
             return al;
         }
 
+        public static List<DBObject> my_select_objects(string prompt)
+        {
+            Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage(prompt);
+            return my_select_objects();
+
+        }
         /// <summary>
         /// 选取图层所有对象
         /// </summary>

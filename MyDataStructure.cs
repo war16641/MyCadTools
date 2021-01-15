@@ -659,6 +659,16 @@ namespace MyDataStructure
                 groups.Add(new List<double>());
                 groups_id.Add(new List<int>());
             }
+            if (isolate_values.Count == 0)//如果没有找到分割 需要单独处理
+            {
+                //输入即为输出
+                for (int i = 0; i < ary1.Count; i++)
+                {
+                    groups[0].Add(ary[i]);
+                    groups_id[0].Add(i);
+                }
+                return true;
+            }
             for (int i = 0; i < ary1.Count; i++)
             {
                 double value = ary1[i];
