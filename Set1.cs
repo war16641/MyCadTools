@@ -10,6 +10,7 @@ using Excel = Microsoft.Office.Interop.Excel;
 using MGO = MyGeometrics;
 using MBE = BRIDGEENGNEERING;
 using Group = Autodesk.AutoCAD.DatabaseServices.Group;
+using System.Diagnostics;
 
 namespace MyCadTools
 {
@@ -18,6 +19,40 @@ namespace MyCadTools
 
     public static class  Set1
     {
+        /// <summary>
+        /// 允许cmd命令 并且返回内容
+        /// 前后会有一行空格
+        /// python中logger的信息会出现乱码或者不显示 只能回去print输出的信息
+        /// 调用：
+        /// RunCMDCommand("python \"E:\\我的文档\\python\\test3.py\"", out string cpuInfo);
+        /// </summary>
+        /// <param name="Command"></param>
+        /// <param name="OutPut"></param>
+        public static void RunCMDCommand(string Command, out string OutPut)
+        {
+            using (Process pc = new Process())
+            {
+                Command = Command.Trim().TrimEnd('&') + "&exit";//必须加退出才能返回值
+
+                pc.StartInfo.FileName = Environment.GetFolderPath(Environment.SpecialFolder.System) + "\\cmd.exe";
+                pc.StartInfo.CreateNoWindow = true;
+                pc.StartInfo.RedirectStandardError = true;
+                pc.StartInfo.RedirectStandardInput = true;
+                pc.StartInfo.RedirectStandardOutput = true;
+                pc.StartInfo.UseShellExecute = false;
+
+                pc.Start();
+
+                pc.StandardInput.WriteLine(Command);
+                pc.StandardInput.AutoFlush = true;
+
+                OutPut = pc.StandardOutput.ReadToEnd();
+                int P = OutPut.IndexOf(Command) + Command.Length;
+                OutPut = OutPut.Substring(P, OutPut.Length - P - 3);
+                pc.WaitForExit();
+                pc.Close();
+            }
+        }
 
         private class MyBunch
         {
