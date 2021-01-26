@@ -2024,6 +2024,60 @@ namespace MyCadTools
                 
             }
         }
+
+
+
+        /// <summary>
+        /// 文本中的数字相加
+        /// 如果文本不是纯数字 尝试取结尾前的数字 
+        /// 其他情况就报错
+        /// </summary>
+        public static class AddNumbersInTexts
+        {
+            public static double read_number_in_string(string s)
+            {
+
+                try
+                {
+                    return Convert.ToDouble(s);
+                }
+                catch (System.FormatException)
+                {
+                    //不是纯数字 取出最后一个数字
+                    string strPatten = @"(?<nb>\d+\.?\d*)$";
+                    Regex rex = new Regex(strPatten);
+                    Match m = rex.Match(s);
+                    if (m == null)
+                    {
+                        throw new MGO.MyException("不能识别出数字");
+                    }
+                    return Convert.ToDouble(m.Groups["nb"].Value);
+                
+                }
+            }
+
+
+            [CommandMethod("addnumber")]
+            public static void addnumbers()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                List<DBObject> al = my_select_objects("选择文本\n");
+                List<DBText> texts = new List<DBText>();
+                foreach (var item in al)
+                {
+                    if (item is DBText)
+                    {
+                        texts.Add((DBText)item);
+                    }
+                }
+                double sum = 0.0;
+                foreach (DBText item in texts)
+                {
+                    sum += read_number_in_string(item.TextString);
+                }
+                ed.WriteMessage(string.Format("选择了{0:D}个文本,和为{1:F}", texts.Count, sum));
+            }
+        }
     
 
 
