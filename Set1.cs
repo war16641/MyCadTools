@@ -30,6 +30,7 @@ namespace MyCadTools
         /// <param name="OutPut"></param>
         public static void RunCMDCommand(string Command, out string OutPut)
         {
+            OutPut = "";
             using (Process pc = new Process())
             {
                 Command = Command.Trim().TrimEnd('&') + "&exit";//必须加退出才能返回值
@@ -46,9 +47,10 @@ namespace MyCadTools
                 pc.StandardInput.WriteLine(Command);
                 pc.StandardInput.AutoFlush = true;
 
-                OutPut = pc.StandardOutput.ReadToEnd();
-                int P = OutPut.IndexOf(Command) + Command.Length;
-                OutPut = OutPut.Substring(P, OutPut.Length - P - 3);
+                //下面三行读取cmd的输出 太影响速度了
+                //OutPut = pc.StandardOutput.ReadToEnd();
+                //int P = OutPut.IndexOf(Command) + Command.Length;
+                //OutPut = OutPut.Substring(P, OutPut.Length - P - 3);
                 pc.WaitForExit();
                 pc.Close();
             }
@@ -2078,7 +2080,77 @@ namespace MyCadTools
                 ed.WriteMessage(string.Format("选择了{0:D}个文本,和为{1:F}", texts.Count, sum));
             }
         }
-    
+
+
+
+
+        public static class AdjustTexTPosition
+        {
+
+
+
+
+            /// <summary>
+            /// 生成myrect 代表dbobject的范围
+            /// </summary>
+            /// <param name="oj"></param>
+            /// <returns></returns>
+            public static MGO.MyRect make_rect_from_dbobject(DBObject oj)
+            {
+                return new MGO.MyRect(oj.Bounds.Value.MinPoint.toVector3D(),
+                    oj.Bounds.Value.MaxPoint.toVector3D());
+            }
+            [CommandMethod("adt")]
+            public static void adj_text_position()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                Database db = HostApplicationServices.WorkingDatabase;
+                List<DBObject> al = my_select_objects("选择背景对象：");
+                List<DBObject> al1 = my_select_objects("选择目标对象：");
+                DBText target;
+                if (al1[0] is DBText)
+                {
+                    target = (DBText)al1[0];
+                }
+                else
+                {
+                    ed.WriteMessage("没有选择目标对象");
+                    return;
+                }
+                if (al.Contains(target))
+                {
+                    al.Remove(target);
+                }
+                List<MGO.MyRect> rects = new List<MGO.MyRect>();
+                foreach (DBObject item in al)
+                {
+                    rects.Add(make_rect_from_dbobject(item));
+                }
+                MGO.MyRect target_rect = make_rect_from_dbobject(target);
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    file.WriteLine(string.Format("target rect {0}",target_rect.toline()));
+                    for (int i = 0; i < rects.Count; i++)
+                    {
+                        file.WriteLine(string.Format("bk{1:D} rect {0}", rects[i].toline(),i));
+                    }
+                }
+
+                //运行python
+                RunCMDCommand(@"python E:\我的文档\python\GoodToolPython\autocad\interface_csharp.py  D:\dataexchange.txt 0", out _);
+
+                MyDataExchange.MyDataExchange.make_data_from_file(@"d:\python_return.txt", out Dictionary<string,object> dic ,0);
+
+                if(false==(bool)dic["success"])
+                {
+                    ed.WriteMessage("python过程失败\n");
+                }
+                else
+                {
+                    MyMethods.MoveEntity(target.ObjectId, new Point3d(0, 0, 0), ((MGO.Vector3D)dic["ret"]).toPoint3d());
+                }
+            }
+        }
 
 
         /// <summary>
@@ -2686,6 +2758,18 @@ namespace MyCadTools
         }
 
 
+    }
+
+
+
+    public static partial class forrect
+    {
+        public static string toline(this MGO.MyRect rect)
+        {
+            string s = string.Format("{0:f4},{1:f4},{2:f4},{3:f4},{4:f4},0", rect.leftright.x, rect.leftright.y, rect.leftright.z,
+                rect.rightup.x - rect.leftright.x, rect.rightup.y - rect.leftright.y);
+            return s;
+        }
     }
 
 }
