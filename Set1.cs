@@ -5,19 +5,19 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Excel = Microsoft.Office.Interop.Excel;
-using MGO = MyGeometrics;
-using MBE = BRIDGEENGNEERING;
 using Group = Autodesk.AutoCAD.DatabaseServices.Group;
-using System.Diagnostics;
+using MBE = BRIDGEENGNEERING;
+using MGO = MyGeometrics;
 
 namespace MyCadTools
 {
 
-    
 
-    public static class  Set1
+
+    public static class Set1
     {
         /// <summary>
         /// 允许cmd命令 并且返回内容
@@ -28,7 +28,7 @@ namespace MyCadTools
         /// </summary>
         /// <param name="Command"></param>
         /// <param name="OutPut"></param>
-        public static void RunCMDCommand(string Command, out string OutPut)
+        public static void RunCMDCommand(string Command, out string OutPut,bool show_windows=false)
         {
             OutPut = "";
             using (Process pc = new Process())
@@ -36,7 +36,7 @@ namespace MyCadTools
                 Command = Command.Trim().TrimEnd('&') + "&exit";//必须加退出才能返回值
 
                 pc.StartInfo.FileName = Environment.GetFolderPath(Environment.SpecialFolder.System) + "\\cmd.exe";
-                pc.StartInfo.CreateNoWindow = true;
+                pc.StartInfo.CreateNoWindow = show_windows;
                 pc.StartInfo.RedirectStandardError = true;
                 pc.StartInfo.RedirectStandardInput = true;
                 pc.StartInfo.RedirectStandardOutput = true;
@@ -56,6 +56,26 @@ namespace MyCadTools
             }
         }
 
+        /// <summary>
+        /// 和上面一样 但是会显示cmd窗口
+        /// </summary>
+        /// <param name="Command"></param>
+        public static void RunCMDCommand1(string Command)
+        {
+            Command = Command.Trim().TrimEnd('&') + "&exit";//必须加退出才能返回值
+            using (Process process = new Process())
+            {
+                process.StartInfo.FileName = Environment.GetFolderPath(Environment.SpecialFolder.System) + "\\cmd.exe";
+                process.StartInfo.UseShellExecute = true;
+                process.StartInfo.RedirectStandardInput = false;
+                process.StartInfo.RedirectStandardOutput = false;
+                process.StartInfo.Arguments = "/k " + Command;
+                process.Start();
+                process.WaitForExit();
+                process.Close();
+            }
+
+        }
         private class MyBunch
         {
             //public MyGeometrics.Vector3D minpoint;
@@ -361,7 +381,7 @@ namespace MyCadTools
 
 
                 List<DBText> texts = new List<DBText>();
-                
+
                 foreach (DBObject item in al)
                 {
                     if (item is DBText)
@@ -372,7 +392,7 @@ namespace MyCadTools
                 List<double> dbs = new List<double>();
                 foreach (DBText item in texts)
                 {
-                    dbs.Add(item.Position.Y*-1.0);
+                    dbs.Add(item.Position.Y * -1.0);
                 }
                 List<List<int>> group_ids = new List<List<int>>();
                 MyDataStructure.UnamedClass.classify(dbs, out _, out group_ids, span);
@@ -403,15 +423,15 @@ namespace MyCadTools
                 {
                     foreach (DBText tx in item)
                     {
-                        edit_text(string.Format(format, 
-                            ForAutoNumbering.dic[funcname](ii + 1 + offset), 
+                        edit_text(string.Format(format,
+                            ForAutoNumbering.dic[funcname](ii + 1 + offset),
                             ForAutoNumbering.dic[funcname](texts.Count)),
                             tx);
                         ii += 1;
                     }
                 }
-                
-                
+
+
             }
         }
 
@@ -616,7 +636,7 @@ namespace MyCadTools
 
             public void adjust_position_of_shengdu()
             {
-                if (null==this.shengdu)
+                if (null == this.shengdu)
                 {
                     return;
                 }
@@ -630,7 +650,7 @@ namespace MyCadTools
                 MyGeometrics.Vector3D diff = c - rc;//差的的这个向量
                 MyGeometrics.Vector3D adjust = diff.projection_on_line(elo.direction);//投影到这个格式线上
                 DBObject t = this.shengdu;
-                MyMethods.MoveEntity(this.shengdu.ObjectId,new Point3d(0, 0, 0), (-adjust).toPoint3d());
+                MyMethods.MoveEntity(this.shengdu.ObjectId, new Point3d(0, 0, 0), (-adjust).toPoint3d());
                 //MyMethods.MoveEnity(new Point3d(0, 0, 0), (-adjust).toPoint3d(),)
 
             }
@@ -666,7 +686,7 @@ namespace MyCadTools
                     foreach (DBObject item1 in co)
                     {
                         Entity T1 = (Entity)item1;
-                        
+
                         T1.Layer = "DZ";
                         T1.Linetype = "ByLayer";
                         db.AddEntityToModelSpace(T1);
@@ -721,7 +741,8 @@ namespace MyCadTools
                     this.zongdian = t.XLine2Point.toVector3D();
                     this.measurement = t.Measurement;
                     this.layername = t.Layer;
-                }else if(o is AlignedDimension)
+                }
+                else if (o is AlignedDimension)
                 {
                     AlignedDimension t = (AlignedDimension)o;
                     this.qidian = t.XLine1Point.toVector3D();
@@ -736,7 +757,7 @@ namespace MyCadTools
 
             }
 
-            public static bool operator ==(MyDim a,MyDim b)
+            public static bool operator ==(MyDim a, MyDim b)
             {
                 return a.dbo.ObjectId == b.dbo.ObjectId;
             }
@@ -746,7 +767,7 @@ namespace MyCadTools
             }
             public override bool Equals(object obj)
             {
-                if(obj is not MyDim)
+                if (obj is not MyDim)
                 {
                     return false;
                 }
@@ -766,8 +787,8 @@ namespace MyCadTools
             /// <returns></returns>
             public MyGeometrics.MyRect rect()
             {
-                double minx,maxx;
-                if (this.qidian.x<this.zongdian.x)
+                double minx, maxx;
+                if (this.qidian.x < this.zongdian.x)
                 {
                     minx = this.qidian.x;
                     maxx = this.zongdian.x;
@@ -775,7 +796,7 @@ namespace MyCadTools
                 else
                 {
                     minx = this.zongdian.x;
-                    maxx= this.qidian.x;
+                    maxx = this.qidian.x;
                 }
                 double miny, maxy;
                 if (this.qidian.y < this.zongdian.y)
@@ -799,12 +820,12 @@ namespace MyCadTools
             public List<MyDim> chain;
             public DBText qiaoming;
             public MyGeometrics.MyRect rect;
-            public string name="";
+            public string name = "";
             public double area = 0.0;
             public MyGeometrics.Vector3D direction;
             public double length = 0.0;//图上全长
-            public double lc_qidian=0.0;
-            public double lc_zongdian=0.0;//桥的起止里程
+            public double lc_qidian = 0.0;
+            public double lc_zongdian = 0.0;//桥的起止里程
 
 
             /// <summary>
@@ -880,7 +901,7 @@ namespace MyCadTools
                 if (!m.Success) return false;
                 bg_name = m.Value;
                 m = Regex.Match(text, @"(\d+\.?\d*)(?=\s*亩)");
-                if (!m.Success ) return false;
+                if (!m.Success) return false;
                 area = Convert.ToDouble(m.Value);
                 return true;
             }
@@ -888,7 +909,7 @@ namespace MyCadTools
 
             public void calc_lc(mytest1.RailwayRoute rr)
             {
-                this.lc_qidian=rr.get_mileage_at_point(this.chain[0].qidian);
+                this.lc_qidian = rr.get_mileage_at_point(this.chain[0].qidian);
                 this.lc_zongdian = rr.get_mileage_at_point(this.chain[this.chain.Count - 1].zongdian);
             }
         }
@@ -936,12 +957,12 @@ namespace MyCadTools
 
 
 
-            
+
 
 
             //收集桥名
-            List<DBObject> lst_text1 ;
-            if(!select_all_objects_on_layer(qname,out lst_text1))
+            List<DBObject> lst_text1;
+            if (!select_all_objects_on_layer(qname, out lst_text1))
             {
                 ed.WriteMessage(string.Format("不存在图层{0},命令结束。\n", qname));
                 return;
@@ -976,7 +997,7 @@ namespace MyCadTools
                     alt.Add(i);
                 }
             }
-            for (int i = alt.Count-1; i >-1; i--)
+            for (int i = alt.Count - 1; i > -1; i--)
             {
                 al.RemoveAt(alt[i]);
             }
@@ -1009,7 +1030,7 @@ namespace MyCadTools
             dims.Remove(head);
             List<MyDim> cur_chain = new List<MyDim>();
             cur_chain.Add(head);
-            while (dims.Count>0)
+            while (dims.Count > 0)
             {
                 //计算到head的距离
                 foreach (MyDim item in dims)
@@ -1020,13 +1041,13 @@ namespace MyCadTools
                 dims.Sort((x, y) => x.dist.CompareTo(y.dist));
                 //取出来第一个
                 MyDim nearest = dims[0];
-                if (nearest.dist<dist_tol)//连续的
+                if (nearest.dist < dist_tol)//连续的
                 {
                     cur_chain.Add(nearest);
                     dims.RemoveAt(0);
                     head = nearest;
                 }
-                else if(nearest.dist<dist_gap)
+                else if (nearest.dist < dist_gap)
                 {
                     ed.WriteMessage(string.Format("发现与上一个标注距离为{0:2F}的标注\n", nearest.dist));
                     ed.WriteMessage("该标注信息\n");
@@ -1043,9 +1064,9 @@ namespace MyCadTools
                     dims.RemoveAt(0);
                 }
 
-                
+
             }
-            if (cur_chain.Count!=0)
+            if (cur_chain.Count != 0)
             {
                 chains.Add(cur_chain);
             }
@@ -1088,7 +1109,7 @@ namespace MyCadTools
                     }
                     //再使用局部坐标系匹配
                     double x_text = tf.trans(text.Position.toVector3D()).x;//计算text在新坐标系下的位置
-                    if (x_text>0 && x_text<zdx)
+                    if (x_text > 0 && x_text < zdx)
                     {
                         item.qiaoming = text;
                         bridges_match.Add(item);
@@ -1107,7 +1128,7 @@ namespace MyCadTools
                     bridges_unmatch.Add(item);
                 }
             }
-            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n" + Environment.NewLine, bridges_match.Count,bridges_unmatch.Count));
+            ed.WriteMessage(string.Format("匹配了{0:D}个桥，未匹配{1:D}个桥。\n" + Environment.NewLine, bridges_match.Count, bridges_unmatch.Count));
             //ed.WriteMessage("打印未匹配上桥的text：\n");
             foreach (DBText item in lst_text)
             {
@@ -1120,7 +1141,7 @@ namespace MyCadTools
             List<MyBridge> bridges1 = new List<MyBridge>();
             foreach (MyBridge item in bridges_match)
             {
-                if(!item.read_text())
+                if (!item.read_text())
                 {
                     ct += 1;
                     bridges1.Add(item);
@@ -1156,14 +1177,14 @@ namespace MyCadTools
                     MyDataStructure.DataUnit duthis = new MyDataStructure.DataUnit(fdmt);
                     duthis.data.Add("用地类别", thisdim.layername);
                     duthis.data.Add("测量长度", thisdim.measurement);
-                    duthis.data.Add("面积", thisdim.measurement/item.length*item.area);
+                    duthis.data.Add("面积", thisdim.measurement / item.length * item.area);
                     fdmt.units.Add(duthis);
                 }
                 //汇总这个桥
                 MyDataStructure.FLHZ_OPERATION flhz1 = new MyDataStructure.FLHZ_OPERATION();
                 flhz1.fieldname = "面积";
                 flhz1.func = MyDataStructure.MyStatistic.sum;
-                MyDataStructure.FlatDataModel fdmt1 = fdmt.flhz(new List<string>() { "用地类别" },flhz1);
+                MyDataStructure.FlatDataModel fdmt1 = fdmt.flhz(new List<string>() { "用地类别" }, flhz1);
                 //写入到统计结果中
                 MyDataStructure.DataUnit du = new MyDataStructure.DataUnit(fdm_result);
                 du.data.Add("桥名", item.name);
@@ -1173,13 +1194,13 @@ namespace MyCadTools
                 {
                     MyDataStructure.DataUnit du1 = fdmt1.find_one(delegate (MyDataStructure.DataUnit a)
                       {
-                          if (tp ==(string)a.data["用地类别"])
+                          if (tp == (string)a.data["用地类别"])
                           {
                               return true;
                           }
                           return false;
                       });
-                    if (du1==null)//没有找到这个用地类型 即：这个桥没有这个用地类型
+                    if (du1 == null)//没有找到这个用地类型 即：这个桥没有这个用地类型
                     {
                         du.data.Add(tp, 0.0);
                     }
@@ -1545,7 +1566,7 @@ namespace MyCadTools
         public static class mytest1
         {
 
-            
+
 
 
             public class MileageLabelPair//里程标 由text和短横线组成
@@ -1557,8 +1578,8 @@ namespace MyCadTools
                 public bool calc_lc(MGO.Polyline pl)
                 {
                     this.lc = -1;
-                    double t;int t1;
-                    bool b=pl.contain(this.elo.StartPoint.toVector3D(), 1e-2,out this.lc, out t,out t1);
+                    double t; int t1;
+                    bool b = pl.contain(this.elo.StartPoint.toVector3D(), 1e-2, out this.lc, out t, out t1);
                     if (!b)
                     {
                         this.lc = -1;
@@ -1584,7 +1605,7 @@ namespace MyCadTools
                     RailwayRoute rr = new RailwayRoute();
                     ed.WriteMessage("选择多段线：\n");
                     List<DBObject> al = my_select_objects();
-                    MGO.Polyline polyline=null;
+                    MGO.Polyline polyline = null;
                     foreach (var item in al)
                     {
                         if (item is Polyline)
@@ -1594,7 +1615,7 @@ namespace MyCadTools
                             break;
                         }
                     }
-                    if (null==polyline)
+                    if (null == polyline)
                     {
                         ed.WriteMessage("未选择多段线，结束\n");
                         return null;
@@ -1629,7 +1650,7 @@ namespace MyCadTools
                         throw new MGO.MyException("未选择多段线\n");
                     }
                     //选择里程标
-                    Line elo=null;
+                    Line elo = null;
                     DBText text = null; ;
                     ed.WriteMessage("选择里程标（短横线和文字）：\n");
                     al = my_select_objects();
@@ -1638,12 +1659,13 @@ namespace MyCadTools
                         if (item is Line)
                         {
                             elo = (Line)item;
-                        }else if(item is DBText)
+                        }
+                        else if (item is DBText)
                         {
                             text = (DBText)item;
                         }
                     }
-                    if (null==elo || null==text)
+                    if (null == elo || null == text)
                     {
                         throw new MGO.MyException("未选择里程标\n");
 
@@ -1651,9 +1673,9 @@ namespace MyCadTools
 
                     //开始处理
                     double mil;
-                    if (!MBE.MyBridgeEngineering.read_mileage_from_text(text.TextString,out mil))
+                    if (!MBE.MyBridgeEngineering.read_mileage_from_text(text.TextString, out mil))
                     {
-                        throw new MGO.MyException(string.Format("无法从{0}读取里程标\n",text.TextString));
+                        throw new MGO.MyException(string.Format("无法从{0}读取里程标\n", text.TextString));
                     }
 
                     rr.pl.contain(elo.StartPoint.toVector3D(), 1e-3, out double lc, out _, out _);
@@ -1669,13 +1691,13 @@ namespace MyCadTools
                 /// <param name="v"></param>
                 /// <param name="tol"></param>
                 /// <returns></returns>
-                public double get_mileage_at_point(MGO.Vector3D v,double tol=1e-3)
+                public double get_mileage_at_point(MGO.Vector3D v, double tol = 1e-3)
                 {
                     bool fi;
                     double lc;
                     int id;
                     this.pl.calc_nearest_point(v, out fi, out lc, out id, tol);
-                    return lc+this.qidianlicheng;
+                    return lc + this.qidianlicheng;
                 }
             }
 
@@ -1697,7 +1719,7 @@ namespace MyCadTools
                 //mpl.contain(p.toVector3D(), 1e-3, out lc, out lc1, out id);
                 //double qidianlc = mil - lc;
                 //bool fi;
-                RailwayRoute rr= RailwayRoute.make1(ed);
+                RailwayRoute rr = RailwayRoute.make1(ed);
                 while (true)
                 {
                     Point3d pp = my_get_point("选择点：\n");
@@ -1858,7 +1880,7 @@ namespace MyCadTools
                 //using (Transaction trans = db.TransactionManager.StartTransaction())
                 //{
                 //    Dictionary dic = db.GroupDictionaryId;
-                    
+
                 //    //打开表
                 //    //BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
                 //    Group bt = (Group)trans.GetObject(db.GroupDictionaryId, OpenMode.ForRead);
@@ -1874,7 +1896,7 @@ namespace MyCadTools
                 //    //    //提交
                 //    //}
                 //    btr.AppendEntity((Entity)g);
-                    
+
                 //    trans.AddNewlyCreatedDBObject(g, true);
                 //    trans.Commit();
                 //}
@@ -1890,9 +1912,9 @@ namespace MyCadTools
             /// <param name="b"></param>
             /// <param name="angle"></param>
             /// <returns></returns>
-            public static MGO.Vector3D cacl_inner_points(double a,double b,double angle)
+            public static MGO.Vector3D cacl_inner_points(double a, double b, double angle)
             {
-                double x = Math.Sqrt(1.0 / (1.0 / (a*a)+Math.Tan(angle)* Math.Tan(angle)/b/b));
+                double x = Math.Sqrt(1.0 / (1.0 / (a * a) + Math.Tan(angle) * Math.Tan(angle) / b / b));
                 double y = x * Math.Tan(angle);
                 return new MGO.Vector3D(x, y);
             }
@@ -1917,7 +1939,7 @@ namespace MyCadTools
                 //double p2 = 1.0;
                 //double p3 = 3.0;
                 double y_to_x = 1.2;
-                MGO.Vector3D x1 =  new MGO.Vector3D(0, p1 * y_to_x);
+                MGO.Vector3D x1 = new MGO.Vector3D(0, p1 * y_to_x);
                 Ellipse ellipse = new Ellipse();
                 ellipse.Set(
                     center.toPoint3d(),     // Center
@@ -1936,39 +1958,39 @@ namespace MyCadTools
                     center.toPoint3d(),     // Center
                     new Vector3d(0, 0, 1),    // Normal
                     x2.toVector3D(),  // Major Axis
-                    (p1+p2)/x2.y,                      // Radius radio
+                    (p1 + p2) / x2.y,                      // Radius radio
                     Math.PI * 1.5,                        // Start Angle
                     Math.PI * 2.0               // End Angle
                 );
                 db.AddEntityToModelSpace(ellipse);
 
-                MGO.Vector3D x3 = x2 + new MGO.Vector3D(0, p3 , 0);//增量不保持这个比例
+                MGO.Vector3D x3 = x2 + new MGO.Vector3D(0, p3, 0);//增量不保持这个比例
                 ellipse = new Ellipse();
                 ellipse.Set(
                     center.toPoint3d(),     // Center
                     new Vector3d(0, 0, 1),    // Normal
                     x3.toVector3D(),  // Major Axis
-                    (p1 + p2+p3) / x3.y,                      // Radius radio
+                    (p1 + p2 + p3) / x3.y,                      // Radius radio
                     Math.PI * 1.5,                        // Start Angle
                     Math.PI * 2.0               // End Angle
                 );
                 db.AddEntityToModelSpace(ellipse);
 
                 //锥体顶平台
-                MGO.Vector3D x0 =  new MGO.Vector3D(0, 0.75*y_to_x, 0);//增量不保持这个比例
+                MGO.Vector3D x0 = new MGO.Vector3D(0, 0.75 * y_to_x, 0);//增量不保持这个比例
                 ellipse = new Ellipse();
                 ellipse.Set(
                     center.toPoint3d(),     // Center
                     new Vector3d(0, 0, 1),    // Normal
                     x0.toVector3D(),  // Major Axis
-                    1.0/y_to_x,                      // Radius radio
+                    1.0 / y_to_x,                      // Radius radio
                     Math.PI * 1.5,                        // Start Angle
                     Math.PI * 2.0               // End Angle
                 );
                 db.AddEntityToModelSpace(ellipse);
 
                 //画边界
-                Line elo1 = new Line(center.toPoint3d(), new Point3d(center.x + p1 + p2 + p3,center.y,0));
+                Line elo1 = new Line(center.toPoint3d(), new Point3d(center.x + p1 + p2 + p3, center.y, 0));
                 Line elo2 = new Line(center.toPoint3d(), (center + x3).toPoint3d());
                 db.AddEntityToModelSpace(elo1, elo2);
 
@@ -1987,7 +2009,7 @@ namespace MyCadTools
                     v1 = center + Abutment.cacl_inner_points(0.75, 0.75 * y_to_x, alpha);
                     v2 = center + Abutment.cacl_inner_points(p1 * perc2, p1 * y_to_x * perc2, alpha);
                     db.AddEntityToModelSpace(new Line(v1.toPoint3d(), v2.toPoint3d()));
-                    if (perc2==perc)
+                    if (perc2 == perc)
                     {
                         perc2 = perc1;
                     }
@@ -2009,8 +2031,8 @@ namespace MyCadTools
                 foreach (var item in angles)
                 {
                     double alpha = item / 180.0 * Math.PI;
-                    v1 = center + Abutment.cacl_inner_points(p1+p2, x2.y, alpha);
-                    v2 = center + Abutment.cacl_inner_points((p1 +p2+p3)*perc2, x3.y * perc2, alpha);
+                    v1 = center + Abutment.cacl_inner_points(p1 + p2, x2.y, alpha);
+                    v2 = center + Abutment.cacl_inner_points((p1 + p2 + p3) * perc2, x3.y * perc2, alpha);
                     db.AddEntityToModelSpace(new Line(v1.toPoint3d(), v2.toPoint3d()));
                     if (perc2 == perc)
                     {
@@ -2023,7 +2045,7 @@ namespace MyCadTools
                 }
 
                 //Group g = new Autodesk.AutoCAD.DatabaseServices.Group();
-                
+
             }
         }
 
@@ -2054,7 +2076,7 @@ namespace MyCadTools
                         throw new MGO.MyException("不能识别出数字");
                     }
                     return Convert.ToDouble(m.Groups["nb"].Value);
-                
+
                 }
             }
 
@@ -2083,7 +2105,9 @@ namespace MyCadTools
 
 
 
-
+        /// <summary>
+        /// 调整文字位置 
+        /// </summary>
         public static class AdjustTexTPosition
         {
 
@@ -2097,6 +2121,19 @@ namespace MyCadTools
             /// <returns></returns>
             public static MGO.MyRect make_rect_from_dbobject(DBObject oj)
             {
+                if (oj is Polyline)
+                {
+                    Polyline pl = ((Polyline)oj);
+                    double width = pl.GetStartWidthAt(0);
+                    Point3d p1 = new Point3d(pl.Bounds.Value.MinPoint.X - width,
+                        pl.Bounds.Value.MinPoint.Y - width,
+                        pl.Bounds.Value.MinPoint.Z);
+                    Point3d p2 = new Point3d(pl.Bounds.Value.MaxPoint.X + width,
+                        pl.Bounds.Value.MaxPoint.Y + width,
+                        pl.Bounds.Value.MaxPoint.Z);
+                    return new MGO.MyRect(p1.toVector3D(), p2.toVector3D());
+
+                }
                 return new MGO.MyRect(oj.Bounds.Value.MinPoint.toVector3D(),
                     oj.Bounds.Value.MaxPoint.toVector3D());
             }
@@ -2129,19 +2166,19 @@ namespace MyCadTools
                 MGO.MyRect target_rect = make_rect_from_dbobject(target);
                 using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
                 {
-                    file.WriteLine(string.Format("target rect {0}",target_rect.toline()));
+                    file.WriteLine(string.Format("target rect {0}", target_rect.toline()));
                     for (int i = 0; i < rects.Count; i++)
                     {
-                        file.WriteLine(string.Format("bk{1:D} rect {0}", rects[i].toline(),i));
+                        file.WriteLine(string.Format("bk{1:D} rect {0}", rects[i].toline(), i));
                     }
                 }
 
                 //运行python
-                RunCMDCommand(@"python E:\我的文档\python\GoodToolPython\autocad\interface_csharp.py  D:\dataexchange.txt 0", out _);
+                RunCMDCommand(@"python E:\我的文档\python\GoodToolPython\autocad\interface_csharp.py  single D:\dataexchange.txt 0", out _);
 
-                MyDataExchange.MyDataExchange.make_data_from_file(@"d:\python_return.txt", out Dictionary<string,object> dic ,0);
+                MyDataExchange.MyDataExchange.make_data_from_file(@"d:\python_return.txt", out Dictionary<string, object> dic, 0);
 
-                if(false==(bool)dic["success"])
+                if (false == (bool)dic["success"])
                 {
                     ed.WriteMessage("python过程失败\n");
                 }
@@ -2149,6 +2186,139 @@ namespace MyCadTools
                 {
                     MyMethods.MoveEntity(target.ObjectId, new Point3d(0, 0, 0), ((MGO.Vector3D)dic["ret"]).toPoint3d());
                 }
+            }
+
+            [CommandMethod("TEST01")]
+            public static void test01()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                Database db = HostApplicationServices.WorkingDatabase;
+                List<DBObject> al = my_select_objects("选择背景对象：");
+                foreach (DBObject item in al)
+                {
+                    ed.WriteMessage(item.ToString());
+                }
+                //DBObject o = al[0];
+                //ed.WriteMessage(o.ToString());
+                //if (al[0] is Polyline)
+                //{
+                //    Polyline pl = (Polyline)al[0];
+                //    ed.WriteMessage(string.Format("宽度{0:F}", pl.GetStartWidthAt(0)));
+                //}
+            }
+
+            [CommandMethod("adt1")]
+            public static void adj_text_position1()
+            {
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                Database db = HostApplicationServices.WorkingDatabase;
+                List<DBObject> al = my_select_objects("选择背景对象：");
+                List<DBObject> al1 = my_select_objects("选择目标对象：");
+                Double margin = my_get_double("输入margin");
+                DBText target;
+                if (0 == al1.Count)
+                {
+                    ed.WriteMessage("没有选择目标对象");
+                    return;
+                }
+
+                //只搜集文字 多段线 块
+                List<object> al_valid = new List<object>();
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText || item is BlockReference || item is Polyline)
+                    {
+                        al_valid.Add(item);
+                    }
+                }
+
+                List<object> dels = new List<object>();
+                // //清除直线
+
+                //foreach (DBObject item in al)
+                //{
+                //    if(item is Line)
+                //    {
+                //        dels.Add(item);
+                //    }
+                //}
+                //foreach (DBObject item in dels)
+                //{
+                //    al.Remove(item);
+                //}
+
+                //清除无宽度多段线
+                dels.Clear();
+                foreach (DBObject item in al)
+                {
+                    if (item is Polyline)
+                    {
+                        Polyline pl = (Polyline)item;
+                        if (pl.GetStartWidthAt(0) < 0.2   || pl.Closed==false)
+                        {
+                            dels.Add(item);//起点宽度小于这个值的 删除
+                        }
+                    }
+                }
+                foreach (DBObject item in dels)
+                {
+                    al_valid.Remove(item);
+                }
+
+                //清除目标
+                foreach (DBObject item in al1)
+                {
+                    if (al_valid.Contains(item)) al_valid.Remove(item);
+                }
+
+                //生成rect
+                List<MGO.MyRect> bk_rects = new List<MGO.MyRect>();
+                List<MGO.MyRect> target_rects = new List<MGO.MyRect>();
+                foreach (DBObject item in al_valid)
+                {
+                    bk_rects.Add(make_rect_from_dbobject(item));
+                }
+                foreach (DBObject item in al1)
+                {
+                    target_rects.Add(make_rect_from_dbobject(item));
+                }
+
+                //写入exchange
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    file.WriteLine("margin float {0:f}", margin);
+                    for (int i = 0; i < target_rects.Count; i++)
+                    {
+                        file.WriteLine(string.Format("target{1:d} rect {0}", target_rects[i].toline(),i));
+                    }
+                    for (int i = 0; i < bk_rects.Count; i++)
+                    {
+                        file.WriteLine(string.Format("bk{1:D} rect {0}", bk_rects[i].toline(), i));
+                    }
+                }
+
+                //python
+                //运行python
+                RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\interface_csharp.py  batch D:\dataexchange.txt 0");
+
+                MyDataExchange.MyDataExchange.make_data_from_file(@"d:\python_return.txt", out Dictionary<string, object> dic, 0);
+
+                if (false == (bool)dic["success"])
+                {
+                    ed.WriteMessage("python过程失败\n");
+                }
+                else
+                {
+                    for (int i = 0; i < target_rects.Count; i++)
+                    {
+                        string key = string.Format("ret{0:d}", i);
+                        MyMethods.MoveEntity(al1[i].ObjectId, new Point3d(0, 0, 0), ((MGO.Vector3D)dic[key]).toPoint3d());
+                    }
+                    
+                }
+
+
+
             }
         }
 
@@ -2291,7 +2461,7 @@ namespace MyCadTools
         /// <param name="layername"></param>
         /// <param name="al"></param>
         /// <returns></returns>
-        public static bool select_all_objects_on_layer(string layername,out List<DBObject> al)
+        public static bool select_all_objects_on_layer(string layername, out List<DBObject> al)
         {
             al = new List<DBObject>();
             Database db = HostApplicationServices.WorkingDatabase;
@@ -2320,7 +2490,7 @@ namespace MyCadTools
             SelectionFilter filter = new SelectionFilter(values);// 过滤器
             PromptSelectionResult psr = ed.SelectAll(filter);//选择所有
             SelectionSet SS = psr.Value;
-            if (psr.Status!=PromptStatus.OK)//没有完成筛选，原因很多，这里直接结束了
+            if (psr.Status != PromptStatus.OK)//没有完成筛选，原因很多，这里直接结束了
             {
                 return false;
             }
@@ -2347,14 +2517,14 @@ namespace MyCadTools
             {
                 //打开表
                 BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
-                
+
                 //打开表记录
                 BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 //加入记录
                 for (int i = 0; i < ent.Length; i++)
                 {
                     entId[i] = btr.AppendEntity(ent[i]);
-                    
+
                     //更新记录
                     trans.AddNewlyCreatedDBObject(ent[i], true);
                     //提交
@@ -2365,11 +2535,11 @@ namespace MyCadTools
             return entId;
         }
 
-        
-        public static bool AddLayer(this Database db,string layerName)
+
+        public static bool AddLayer(this Database db, string layerName)
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-            
+
             try
             {
                 SymbolUtilityServices.ValidateSymbolName(layerName, false);
@@ -2408,7 +2578,7 @@ namespace MyCadTools
                 }
             }
 
-            
+
         }
 
         /// <summary>
@@ -2449,7 +2619,7 @@ namespace MyCadTools
                 {
                     CircularArc3d ca = pl.GetArcSegmentAt(i);
                     //需要更具normal来生成arc
-                    if (Math.Abs(ca.Normal.Z-1)<1e-6)//正向
+                    if (Math.Abs(ca.Normal.Z - 1) < 1e-6)//正向
                     {
                         mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.StartPoint.toVector3D(), ca.EndPoint.toVector3D()));
                     }
@@ -2458,7 +2628,7 @@ namespace MyCadTools
                         //逆向
                         mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.EndPoint.toVector3D(), ca.StartPoint.toVector3D()));
                     }
-                    
+
                     //mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(),ca.Radius,ca.StartAngle,ca)
                 }
                 else if (st == SegmentType.Coincident)
@@ -2475,7 +2645,7 @@ namespace MyCadTools
 
         public static void add_to_modelspace(this MGO.LineSegment elo, Database db)
         {
-            Line line = new Line(elo.p1.toPoint3d(),elo.p2.toPoint3d());
+            Line line = new Line(elo.p1.toPoint3d(), elo.p2.toPoint3d());
             db.AddEntityToModelSpace(line);
 
         }
@@ -2559,7 +2729,7 @@ namespace MyCadTools
 
 
 
-        
+
         public static void MoveEntity(Point3d sourcePoint, Point3d targetPoint, params DBObject[] obs)
         {
             // 打开当前图形数据库
