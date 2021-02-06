@@ -73,7 +73,15 @@ namespace MyGeometrics
             }
         }
 
-        public string ToString()
+        public override bool Equals(object obj)
+        {
+            if (obj is Vector3D)
+            {
+                return this == (Vector3D)obj;
+            }
+            return base.Equals(obj);
+        }
+        public override string ToString()
         {
             return string.Format("{0:f4},{1:f4},{2:f4}", x, y, z);
         }
@@ -494,6 +502,7 @@ namespace MyGeometrics
         public double radius;
         public double theta1;
         public double theta2;
+        public double normalz;//轴的z向量 1正向 -1逆向
         public Vector3D center
         {
             get
@@ -501,7 +510,7 @@ namespace MyGeometrics
                 return this._center;
             }
         }
-        public MyArc(Vector3D center, double radius, double theta1, double theta2)
+        public MyArc(Vector3D center, double radius, double theta1, double theta2, double reversed = 1.0)
         {
             //if (theta2 <= theta1)
             //{
@@ -511,6 +520,7 @@ namespace MyGeometrics
             this.radius = radius;
             this.theta1 = theta1;
             this.theta2 = theta2;
+            this.normalz = reversed;
         }
 
 
@@ -521,8 +531,8 @@ namespace MyGeometrics
         /// <param name="center"></param>
         /// <param name="p1"></param>
         /// <param name="p2"></param>
-        public MyArc(Vector3D center, Vector3D p1, Vector3D p2) :
-            this(center, (p1 - center).norm, (p1 - center).calc_angle_in_xoy(), (p2 - center).calc_angle_in_xoy())
+        public MyArc(Vector3D center, Vector3D p1, Vector3D p2, double reversed = 1.0) :
+            this(center, (p1 - center).norm, (p1 - center).calc_angle_in_xoy(), (p2 - center).calc_angle_in_xoy(), reversed)
         {
 
         }
@@ -550,7 +560,7 @@ namespace MyGeometrics
             }
             else
             {
-                double t1 = 0.0;
+                //double t1 = 0.0;
                 double t2 = this.theta2 - this.theta1;
                 t2 = Vector3D.equivalent_angle1(t2);
                 double t = Vector3D.equivalent_angle1(v1.x - this.theta1);
@@ -666,6 +676,16 @@ namespace MyGeometrics
             return false;
         }
 
+        /// <summary>
+        /// 给定点 计算该点在多段线上最近点
+        /// 
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="flag_in">最近点是否在多段线上</param>
+        /// <param name="lc">长度坐标</param>
+        /// <param name="id">最近点对应seg的id</param>
+        /// <param name="tol">计算误差</param>
+        /// <returns></returns>
         public Vector3D calc_nearest_point(Vector3D v, out bool flag_in, out double lc, out int id, double tol = 1e-6)
         {
             lc = 0.0;
@@ -805,9 +825,8 @@ namespace MyGeometrics
         /// </summary>
         /// <param name="v"></param>
         /// <returns></returns>
-        public bool contain(Vector3D v)
+        public bool contain(Vector3D v, double tol = 0.0)
         {
-            double tol = 0.0;
             if (v.x >= this.leftright.x - tol && v.x <= this.rightup.x + tol)
             {
                 if (v.y >= this.leftright.y - tol && v.y <= this.rightup.y + tol)
@@ -816,6 +835,177 @@ namespace MyGeometrics
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// 计算两个区间的距离  （x1,X1）和（x2,X2）
+        /// 相交 返回-1
+        /// 相切 返回0
+        /// 分离 返回最短距离
+        /// </summary>
+        /// <param name="x1"></param>
+        /// <param name="X1"></param>
+        /// <param name="x2"></param>
+        /// <param name="X2"></param>
+        /// <returns></returns>
+        public static double distance_between_sections(double x1, double X1, double x2, double X2)
+        {
+            if (x2 < x1)//小的是1号
+            {
+                double t = x1; double T = X1;
+                x1 = x2; X1 = X2;
+                x2 = t; X2 = T;
+            }
+            if (x2 < X1)//相交
+            {
+                return -1;
+            }
+            else if (x2 == X1)//相切
+            {
+                return 0;
+            }
+            else//分离
+            {
+                return x2 - X1;
+            }
+        }
+
+
+
+        /// <summary>
+        /// 计算两个区间的交集
+        /// 交集是：区间或者点
+        /// 有交集时返回true
+        /// </summary>
+        /// <param name="x1"></param>
+        /// <param name="X1"></param>
+        /// <param name="x2"></param>
+        /// <param name="X2"></param>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
+        public static bool intersection_between_sections(
+            double x1, double X1,
+            double x2, double X2,
+            out double a, out double b)
+        {
+            if (x2 < x1)//小的是1号
+            {
+                double t = x1; double T = X1;
+                x1 = x2; X1 = X2;
+                x2 = t; X2 = T;
+            }
+            if (x2 < X1)//相交
+            {
+                if (X2 <= X1)
+                {
+                    a = x2; b = X2;
+                    return true;
+                }
+                else
+                {
+                    a = x2; b = X1;
+                    return true;
+                }
+            }
+            else if (x2 == X1)//相切
+            {
+                a = b = x2;//此时交集是一个点
+                return true;
+            }
+            else//分离
+            {
+                a = b = 0;//a和b置为0 但不代表0是交集
+                return false;
+            }
+        }
+
+
+        /// <summary>
+        /// 计算两个rect的距离
+        /// 相交 返回-1
+        /// 相切 返回0
+        /// 分离 返回最短距离
+        /// </summary>
+        /// <param name="other"></param>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        public double distance_to_rect(MyRect other, out double x, out double y)
+        {
+            x = MyRect.distance_between_sections(this.leftright.x, this.rightup.x,
+                other.leftright.x, other.rightup.x);
+            y = MyRect.distance_between_sections(this.leftright.y, this.rightup.y,
+                other.leftright.y, other.rightup.y);
+            if (x < 0 && y < 0)//x和y方向是相交 两个rect才是相交
+            {
+                return -1;
+            }
+            else if (x + y == -1)//有一个方向相切 一个相交，两个rect是相切
+            {
+                return 0;
+            }
+            else if (x == 0 && y == 0)//x和y方向是相切 两个rect是相切
+            {
+                return 0;
+            }
+            else//两个rect分离 返回最短距离
+            {
+                if (x < 0)
+                {
+                    return y;
+                }
+                if (y < 0)
+                {
+                    return x;
+                }
+                return Math.Sqrt(x * x + y * y);
+            }
+        }
+
+
+        public MyRect intersection(MyRect other)
+        {
+            double a, b;
+            bool flag;
+
+            //分成两个方向计算
+            flag = MyRect.intersection_between_sections(
+                this.leftright.x, this.rightup.x,
+                other.leftright.x, other.rightup.x,
+                out a, out b);
+            if (!flag) return null;
+            double a1, b1;
+            flag = MyRect.intersection_between_sections(
+                this.leftright.y, this.rightup.y,
+                other.leftright.y, other.rightup.y,
+                out a1, out b1);
+            if (!flag) return null;
+            return new MyRect(new Vector3D(a, a1), new Vector3D(b, b1));
+        }
+
+        public static bool operator ==(MyRect m1, MyRect m2)
+        {
+            if (m1.leftright == m2.leftright && m1.rightup == m2.rightup) return true;
+            return false;
+        }
+        public override bool Equals(object obj)
+        {
+            if (obj is MyRect)
+            {
+                return this == (MyRect)obj;
+            }
+            return base.Equals(obj);
+        }
+        public static bool operator !=(MyRect m1, MyRect m2)
+        {
+            return !(m1 == m2);
+        }
+
+        public override string ToString()
+        {
+            return string.Format("{0:f2},{1:f2}->{2:f2},{3:f2}",
+                this.leftright.x, this.leftright.y, this.rightup.x, this.rightup.y);
         }
     }
 }

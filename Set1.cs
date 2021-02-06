@@ -12,6 +12,7 @@ using Group = Autodesk.AutoCAD.DatabaseServices.Group;
 using MBE = BRIDGEENGNEERING;
 using MGO = MyGeometrics;
 
+
 namespace MyCadTools
 {
 
@@ -2123,6 +2124,7 @@ namespace MyCadTools
             {
                 if (oj is Polyline)
                 {
+                    //多段线有宽度 它的bound要加上这个宽度
                     Polyline pl = ((Polyline)oj);
                     double width = pl.GetStartWidthAt(0);
                     Point3d p1 = new Point3d(pl.Bounds.Value.MinPoint.X - width,
@@ -2322,6 +2324,117 @@ namespace MyCadTools
             }
         }
 
+
+
+        /// <summary>
+        /// 把一个对象复制到网格的节点上
+        /// 网格由两组线定义
+        /// </summary>
+        public static class CopyToGrid
+        {
+            [CommandMethod("ctg")]
+            public static void test()
+            {
+                //获取输入
+                List<DBObject> g1 = my_select_objects("选择第一组线");
+                List<DBObject> g2 = my_select_objects("选择第二组线");
+                List<DBObject> g3 = my_select_objects("选择对象");
+                Point3d bp = my_get_point("选择起点");
+                DBObject target = g3[0];
+                //写入dataexchange
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    int counter = 0;
+                    foreach (DBObject item in g1)
+                    {
+                        if (item is Line)
+                        {
+                            Line elo = (Line)item;
+                            file.WriteLine(string.Format("A{0:d} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", counter, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z));
+                        }
+                        else if (item is Polyline)
+                        {
+                            Polyline pl = (Polyline)item;
+                            file.WriteLine(pl.toPolyline());
+                        }
+                        else if (item is Arc)
+                        {
+                            Arc Ac = (Arc)item;
+                            MGO.MyArc arc;
+                            //bool rv = !(Math.Abs(Ac.Normal.Z - 1) < 1e-6);//是否逆向弧
+                            arc = new MGO.MyArc(Ac.Center.toVector3D(), Ac.StartPoint.toVector3D(), Ac.EndPoint.toVector3D(), Ac.Normal.Z);
+                            //if (Math.Abs(Ac.Normal.Z - 1) < 1e-6)//正向
+                            //{
+                            //    arc = new MGO.MyArc(Ac.Center.toVector3D(), Ac.StartPoint.toVector3D(), Ac.EndPoint.toVector3D());
+                            //}
+                            //else
+                            //{
+                            //    arc = new MGO.MyArc(Ac.Center.toVector3D(), Ac.EndPoint.toVector3D(), Ac.StartPoint.toVector3D());
+                            //}
+                                
+                            string name = string.Format("A{0:d}", counter);
+                            file.WriteLine(arc.toline(name));
+                        }
+                        counter++;
+                    }
+                    counter = 0;
+                    foreach (DBObject item in g2)
+                    {
+                        if (item is Line)
+                        {
+                            Line elo = (Line)item;
+                            file.WriteLine(string.Format("B{0:d} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", counter, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z));
+                        }
+                        else if (item is Arc)
+                        {
+                            Arc Ac = (Arc)item;
+                            MGO.MyArc arc;
+                            //bool rv = !(Math.Abs(Ac.Normal.Z - 1) < 1e-6);
+                            arc = new MGO.MyArc(Ac.Center.toVector3D(), Ac.StartPoint.toVector3D(), Ac.EndPoint.toVector3D(), Ac.Normal.Z);
+                            string name = string.Format("B{0:d}", counter);
+                            file.WriteLine(arc.toline(name));
+                        }
+                        counter++;
+                    }
+
+                }
+
+                //运行python
+                RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\csharporder\copytogrid.py D:\dataexchange.txt 0");
+
+                //读取结果
+                MyDataExchange.MyDataExchange.make_data_from_file(@"d:\python_return.txt", out Dictionary<string, object> dic, 0);
+                Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+                Database db = HostApplicationServices.WorkingDatabase;
+                if (false == (bool)dic["success"])
+                {
+                    ed.WriteMessage("python过程失败\n");
+                }
+                else
+                {
+                    int nb = Convert.ToInt32(dic["nb"]);
+                    if (nb==0)
+                    {
+                        ed.WriteMessage("两组线并未交点\n");
+                    }
+                    else
+                    {
+                        foreach (string key in dic.Keys)
+                        {
+                            if (key.StartsWith("vct"))
+                            {
+                                MGO.Vector3D v = (MGO.Vector3D)dic[key];
+                                ;
+                                MyMethods.CopyEntity(bp, v.toPoint3d(), target);
+                                //db.AddEntityToModelSpace(target.ObjectId.CopyEntity(bp, v.toPoint3d()));
+                            }
+                        }
+                    }
+
+                }
+
+            }
+        }
 
         /// <summary>
         /// 修改既有线的两个端点
@@ -2783,6 +2896,32 @@ namespace MyCadTools
             }
         }
 
+        public static void CopyEntity(Point3d sourcePoint, Point3d targetPoint, DBObject obs)
+        {
+            // 打开当前图形数据库
+            Database db = HostApplicationServices.WorkingDatabase;
+            // 开启事务处理
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                // 打开块表
+                BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                // 打开块表记录
+                BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                //Entity ent = (Entity)trans.GetObject(entId, OpenMode.ForWrite);
+
+                // 打开图形
+                Entity ent = (Entity)obs.ObjectId.GetObject(OpenMode.ForWrite);
+                // 计算变换矩阵
+                Vector3d vectoc = sourcePoint.GetVectorTo(targetPoint);
+                Matrix3d mt = Matrix3d.Displacement(vectoc);
+                Entity  entR = ent.GetTransformedCopy(mt);
+                db.AddEntityToModelSpace(entR);
+
+                // 提交事务处理
+                trans.Commit();
+            }
+        }
+
         /// <summary>
         /// 批量
         /// </summary>
@@ -2934,11 +3073,32 @@ namespace MyCadTools
 
     public static partial class forrect
     {
+
+    }
+
+
+    /// <summary>
+    /// 把mgo里面的类中转换到dataexchange
+    /// </summary>
+    public static partial class ForDataExchange
+    {
         public static string toline(this MGO.MyRect rect)
         {
             string s = string.Format("{0:f4},{1:f4},{2:f4},{3:f4},{4:f4},0", rect.leftright.x, rect.leftright.y, rect.leftright.z,
                 rect.rightup.x - rect.leftright.x, rect.rightup.y - rect.leftright.y);
             return s;
+        }
+        public static string toline(this Line3d elo,string name)
+        {
+            return string.Format("{0} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", name, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
+        }
+        public static string toline(this MGO.LineSegment elo, string name)
+        {
+            return string.Format("{0} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", name, elo.p1.x, elo.p1.y, elo.p1.z, elo.p2.x, elo.p2.y, elo.p2.z);
+        }
+        public static string toline(this MGO.MyArc arc,string name)
+        {
+            return string.Format("{0} arc {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}",name,arc.center.x, arc.center.y, arc.center.z,arc.radius,arc.theta1,arc.normalz*MGO.Vector3D.equivalent_angle1(arc.theta2 - arc.theta1) );
         }
     }
 
