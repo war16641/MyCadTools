@@ -2444,6 +2444,23 @@ namespace MyCadTools
             }
         }
 
+        [CommandMethod("test32")]
+        public static void test32()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+            List<DBObject> al = my_select_objects();
+            //ed.WriteMessage(string.Format("{0}}", al[0].ObjectId.ToString()));
+            ed.WriteMessage(al[0].ObjectId.ToString());
+        }
+        [CommandMethod("test33")]
+        public static void test33()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+            double id =   my_get_double("输入id");
+            //ed.WriteMessage(string.Format("{0}}", al[0].ObjectId.ToString()));
+            ObjectId oi = new ObjectId(new IntPtr(Convert.ToInt64(id)));
+            MyMethods.MoveEntity(oi, new Point3d(0, 0, 0), new Point3d(10, 0, 0));
+        }
         /// <summary>
         /// 修改既有线的两个端点
         /// </summary>
