@@ -2329,6 +2329,7 @@ namespace MyCadTools
         /// <summary>
         /// 把一个对象复制到网格的节点上
         /// 网格由两组线定义
+        /// 线可以是线段 圆弧及多段线
         /// </summary>
         public static class CopyToGrid
         {
@@ -2355,7 +2356,8 @@ namespace MyCadTools
                         else if (item is Polyline)
                         {
                             Polyline pl = (Polyline)item;
-                            file.WriteLine(pl.toPolyline());
+                            string name = string.Format("A{0:d}", counter);
+                            file.WriteLine(pl.toPolyline().toline(name));
                         }
                         else if (item is Arc)
                         {
@@ -2384,6 +2386,12 @@ namespace MyCadTools
                         {
                             Line elo = (Line)item;
                             file.WriteLine(string.Format("B{0:d} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", counter, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z));
+                        }
+                        else if (item is Polyline)
+                        {
+                            Polyline pl = (Polyline)item;
+                            string name = string.Format("B{0:d}", counter);
+                            file.WriteLine(pl.toPolyline().toline(name));
                         }
                         else if (item is Arc)
                         {
@@ -3099,6 +3107,29 @@ namespace MyCadTools
         public static string toline(this MGO.MyArc arc,string name)
         {
             return string.Format("{0} arc {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}",name,arc.center.x, arc.center.y, arc.center.z,arc.radius,arc.theta1,arc.normalz*MGO.Vector3D.equivalent_angle1(arc.theta2 - arc.theta1) );
+        }
+        public static string toline(this MGO.Polyline pl,string name)
+        {
+            string rt = "";
+            rt = string.Format("{0} polyline {1:d}", name, pl.num_of_segs);
+            foreach (var item in pl.segs)
+            {
+                if (item is MGO.MyArc)
+                {
+                    MGO.MyArc arc = (MGO.MyArc)item;
+                    rt += "\n"+arc.toline("_") ;
+                }
+                else if(item is MGO.LineSegment)
+                {
+                    MGO.LineSegment elo = (MGO.LineSegment)item;
+                    rt += "\n"+elo.toline("_") ;
+                }
+                else
+                {
+                    throw new System.Exception("未知类型");
+                }
+            }
+            return rt;
         }
     }
 
