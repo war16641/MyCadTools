@@ -11,4 +11,4 @@ success bool 0
         pl1 polyline 3
         _ lineseg 0,0,0,1,0,0
         _ lineseg 1,0,0,1,1,0
-        _ arc 0,1,0,1,0,-3.14159
+        _ arc 0,1,0,1,0,3.14159

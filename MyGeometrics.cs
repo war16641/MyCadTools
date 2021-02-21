@@ -536,6 +536,26 @@ namespace MyGeometrics
         {
 
         }
+
+        /// <summary>
+        /// 起点 终点
+        /// </summary>
+        public Vector3D start_point
+        {
+            get
+            {
+                Vector3D c = this.center;
+                return new Vector3D(c.x + this.radius * Math.Cos(this.theta1), c.y + this.radius * Math.Sin(this.theta1));
+            }
+        }
+        public Vector3D end_point
+        {
+            get
+            {
+                Vector3D c = this.center;
+                return new Vector3D(c.x + this.radius * Math.Cos(this.theta2), c.y + this.radius * Math.Sin(this.theta2));
+            }
+        }
         /// <summary>
         /// 判断点是否在弧上
         /// </summary>

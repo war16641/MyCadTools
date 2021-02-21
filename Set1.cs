@@ -11,7 +11,7 @@ using Excel = Microsoft.Office.Interop.Excel;
 using Group = Autodesk.AutoCAD.DatabaseServices.Group;
 using MBE = BRIDGEENGNEERING;
 using MGO = MyGeometrics;
-
+using MyDataExchange;
 
 namespace MyCadTools
 {
@@ -20,6 +20,8 @@ namespace MyCadTools
 
     public static class Set1
     {
+        public static Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+        public static Database db = HostApplicationServices.WorkingDatabase;//声明两个常用的cad对象
         /// <summary>
         /// 允许cmd命令 并且返回内容
         /// 前后会有一行空格
@@ -2461,6 +2463,16 @@ namespace MyCadTools
             ObjectId oi = new ObjectId(new IntPtr(Convert.ToInt64(id)));
             MyMethods.MoveEntity(oi, new Point3d(0, 0, 0), new Point3d(10, 0, 0));
         }
+        [CommandMethod("test34")]
+        public static void test34()
+        {
+
+            MyDataExchange.MyDataExchange.make_data_from_file("E:/我的文档/C#/mycadtool/MyCadTools/其他重要文件/测试0.txt"
+                , out Dictionary<string, object> dic);
+            MGO.Polyline pl = (MGO.Polyline)dic["pl1"];
+            pl.add_to_modelspace(Set1.db);
+        }
+
         /// <summary>
         /// 修改既有线的两个端点
         /// </summary>
@@ -2790,18 +2802,68 @@ namespace MyCadTools
 
         public static void add_to_modelspace(this MGO.Polyline pl, Database db)
         {
-            for (int i = 0; i < pl.num_of_segs; i++)
+            //for (int i = 0; i < pl.num_of_segs; i++)
+            //{
+            //    if (pl.segs[i] is MGO.LineSegment)
+            //    {
+            //        MGO.LineSegment elo = (MGO.LineSegment)pl.segs[i];
+            //        elo.add_to_modelspace(db);
+            //    }
+            //    else if (pl.segs[i] is MGO.MyArc)
+            //    {
+            //        ((MGO.MyArc)pl.segs[i]).add_to_modelspace(db);
+            //    }
+            //}
+
+            Polyline pl1 = new Polyline();
+            int vertex_ct = 0;//多段线顶点的计数
+            foreach (var item in pl.segs)
             {
-                if (pl.segs[i] is MGO.LineSegment)
+                if (item is MGO.MyArc)
                 {
-                    MGO.LineSegment elo = (MGO.LineSegment)pl.segs[i];
-                    elo.add_to_modelspace(db);
+                    MGO.MyArc arc = (MGO.MyArc)item;
+                    //计算凸度
+                    double angle = arc.theta2 - arc.theta1;
+                    double tudu = Math.Tan(angle / 4);
+                    MGO.Vector3D sp = arc.start_point; MGO.Vector3D ep = arc.end_point;
+                    pl1.AddVertexAt(vertex_ct, new Point2d(sp.x, sp.y), tudu, 0, 0);
+                    vertex_ct++;
                 }
-                else if (pl.segs[i] is MGO.MyArc)
+                else if(item is MGO.LineSegment)
                 {
-                    ((MGO.MyArc)pl.segs[i]).add_to_modelspace(db);
+                    MGO.LineSegment elo = (MGO.LineSegment)item;
+                    MGO.Vector3D sp = elo.p1;
+                    pl1.AddVertexAt(vertex_ct, new Point2d(sp.x, sp.y), 0, 0, 0);
+                    vertex_ct++;
+                }
+                else
+                {
+                    throw new System.Exception("意外的多段线seg类型");
                 }
             }
+            //最后一个点
+            MGO.Imygeometrics last = pl.segs[pl.num_of_segs - 1];
+            MGO.Vector3D ep1;
+            if (last is MGO.MyArc)
+            {
+                MGO.MyArc arc = (MGO.MyArc)last;
+                ep1 = arc.end_point;
+            }
+            else if (last is MGO.LineSegment)
+            {
+                MGO.LineSegment elo = (MGO.LineSegment)last;
+                ep1 = elo.p2;
+            }
+            else
+            {
+                throw new System.Exception("意外的多段线seg类型");
+            }
+            pl1.AddVertexAt(vertex_ct, new Point2d(ep1.x, ep1.y), 0, 0, 0);
+            vertex_ct++;
+            db.AddEntityToModelSpace(pl1);
+            
+            
+           
         }
         public static void add_to_modelspace(this MGO.MyArc ma, Database db)
         {
@@ -3149,5 +3211,10 @@ namespace MyCadTools
             return rt;
         }
     }
+
+
+
+
+
 
 }
