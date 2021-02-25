@@ -2473,6 +2473,53 @@ namespace MyCadTools
             pl.add_to_modelspace(Set1.db);
         }
 
+        public static class FindString 
+        {
+            public static int group_counter = 0;
+            public static string get_group_name()
+            {
+                string t = string.Format("nyh_group{0:D}", FindString.group_counter);
+                FindString.group_counter++;
+                return t;
+            }
+            [CommandMethod("Fstr")]
+            public static void fstr()
+            {
+                //获取正则表达式
+                string rexepr = my_get_string("输入正则表达式");
+                //获取用户选择的文本
+                List<DBObject> al = my_select_objects();
+                List<DBText> texts = new List<DBText>();
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText)
+                    {
+                        texts.Add((DBText)item);
+                    }
+                }
+                //开始匹配
+                List<DBText> ontarget = new List<DBText>();//匹配上的
+                Match m;
+                foreach (DBText item in texts)
+                {
+                    m = Regex.Match(item.TextString, rexepr);
+                    if (m.Success == false) continue;
+                    ontarget.Add(item);
+                }
+                Set1.ed.WriteMessage(string.Format("一共找到{0:D}个文本", ontarget.Count));
+                //编组
+                List<DBObject> al1 = new List<DBObject>();
+                foreach (var item in ontarget)
+                {
+                    al1.Add(item);
+                }
+                if (ontarget.Count > 0)
+                {
+                    MyMethods.MakeGroup(al1, FindString.get_group_name());
+                }
+            }
+        }
+
         /// <summary>
         /// 修改既有线的两个端点
         /// </summary>
@@ -2876,6 +2923,34 @@ namespace MyCadTools
 
     public static class MyMethods
     {
+
+
+        public static void MakeGroup(List<DBObject> al,string name)
+        {
+            ObjectIdCollection ids = new ObjectIdCollection();
+            foreach (DBObject item in al)
+            {
+                ids.Add(item.ObjectId);
+            }
+            using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+            {
+                var groupDict = trans.GetObject(Set1.db.GroupDictionaryId,
+                    OpenMode.ForWrite) as DBDictionary;
+                Group group;
+                if(groupDict.Contains(name))
+                {
+                    group= trans.GetObject(groupDict.GetAt(name), OpenMode.ForWrite) as Group;
+                }
+                else
+                {
+                    group = new Group();
+                    groupDict.SetAt(name, group);
+                    trans.AddNewlyCreatedDBObject(group, true);
+                }
+                group.Append(ids);
+                trans.Commit();
+            }
+        }
 
         /// <summary>
         /// 缩放图形 图形已经加到图形数据库中
