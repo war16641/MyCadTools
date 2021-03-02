@@ -2453,6 +2453,13 @@ namespace MyCadTools
             List<DBObject> al = my_select_objects();
             //ed.WriteMessage(string.Format("{0}}", al[0].ObjectId.ToString()));
             ed.WriteMessage(al[0].ObjectId.ToString());
+            MLeader ml;
+            if (al[0] is MLeader)
+            {
+                ml = (MLeader)al[0];
+                ml.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+            }
+            int a = 0;
         }
         [CommandMethod("test33")]
         public static void test33()
@@ -2471,6 +2478,128 @@ namespace MyCadTools
                 , out Dictionary<string, object> dic);
             MGO.Polyline pl = (MGO.Polyline)dic["pl1"];
             pl.add_to_modelspace(Set1.db);
+        }
+        [CommandMethod("test35")]
+        public static void test35()
+        {
+            //绘制出所有的pl
+            MyDataExchange.MyDataExchange.make_data_from_file("E:/我的文档/C#/mycadtool/MyCadTools/其他重要文件/测试0.txt"
+                , out Dictionary<string, object> dic);
+            foreach (KeyValuePair<string,object> item in dic)
+            {
+                string k = item.Key;
+                if (k.Contains("pl"))
+                {
+                    MGO.Polyline pl = (MGO.Polyline)item.Value;
+                    pl.add_to_modelspace(Set1.db);
+                }
+            }
+
+        }
+        static ObjectId GetArrowObjectId(string newArrName)
+        {
+            ObjectId arrObjId = ObjectId.Null;
+
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+
+            // Get the current value of DIMBLK
+            string oldArrName = Application.GetSystemVariable("DIMBLK") as string;
+
+            // Set DIMBLK to the new style
+            // (this action may create a new block)
+            Application.SetSystemVariable("DIMBLK", newArrName);
+
+            // Reset the previous value of DIMBLK
+            if (oldArrName.Length != 0)
+                Application.SetSystemVariable("DIMBLK", oldArrName);
+
+            // Now get the objectId of the block
+            Transaction tr = db.TransactionManager.StartTransaction();
+            using (tr)
+            {
+                BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                arrObjId = bt[newArrName];
+                tr.Commit();
+            }
+            return arrObjId;
+        }
+        [CommandMethod("CREATEMLEADER")]
+        public static void CreateMLeader()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            Database db = doc.Database;
+            const string arrowName = "_DOT";
+            ObjectId arrId = GetArrowObjectId(arrowName);
+            double sc = my_get_double("系数");
+            // Get the start point of the leader
+            PromptPointResult result = ed.GetPoint("/n 选择标注起始位置: ");
+            if (result.Status != PromptStatus.OK)
+                return;
+            Point3d startPt = result.Value;
+            
+            // Get the end point of the leader
+            PromptPointOptions opts = new PromptPointOptions("/n选择标注终止位置: ");
+            opts.BasePoint = startPt;
+            opts.UseBasePoint = true;
+            result = ed.GetPoint(opts);
+            if (result.Status != PromptStatus.OK)
+                return;
+            Point3d endPt = result.Value;
+
+            MGO.Line3D t=MGO.Line3D.make_line_by_2_points(startPt.toVector3D(), endPt.toVector3D());
+            double textangle = t.angle;
+            Transaction tr = db.TransactionManager.StartTransaction();
+            using (tr)
+            {
+                try
+                {
+                    BlockTable bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+
+                    // Create the MLeader
+                    MLeader mld = new MLeader();
+                    int ldNum = mld.AddLeader();
+                    int lnNum = mld.AddLeaderLine(ldNum);
+                    mld.AddFirstVertex(lnNum, startPt);
+                    mld.AddLastVertex(lnNum, endPt);
+                    mld.ArrowSymbolId = arrId;
+                    mld.LeaderLineType = LeaderType.StraightLeader;
+                    mld.EnableDogleg = false;//取消基线
+                    if (sc<0)
+                    {
+                        mld.TextAlignmentType = TextAlignmentType.RightAlignment;
+                        mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                    }
+
+                    // Create the MText
+                    MText mt = new MText();
+                    mt.Contents = "ABC";
+                    mt.Location = endPt;
+                    mt.Rotation = textangle*sc;
+                    mld.ContentType = ContentType.MTextContent;
+                    mld.MText = mt;
+                    
+                    //TextAttachmentType.AttachmentBottomLine
+                    mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                    
+                    
+                    //mld.TextAngleType = TextAngleType.InsertAngle;
+                    
+
+                    // Add the MLeader
+                    btr.AppendEntity(mld);
+                    tr.AddNewlyCreatedDBObject(mld, true);
+                    tr.Commit();
+                }
+                catch
+                {
+                    // Would also happen automatically
+                    // if we didn't commit
+                    tr.Abort();
+                }
+            }
         }
 
         public static class FindString 
