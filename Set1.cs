@@ -2471,7 +2471,7 @@ namespace MyCadTools
             MyMethods.MoveEntity(oi, new Point3d(0, 0, 0), new Point3d(10, 0, 0));
         }
         [CommandMethod("test34")]
-        public static void test34()
+        public static void test34()//从测试0文件中绘制pl1多段线
         {
 
             MyDataExchange.MyDataExchange.make_data_from_file("E:/我的文档/C#/mycadtool/MyCadTools/其他重要文件/测试0.txt"
@@ -2480,7 +2480,7 @@ namespace MyCadTools
             pl.add_to_modelspace(Set1.db);
         }
         [CommandMethod("test35")]
-        public static void test35()
+        public static void test35()//从测试0文件中绘制所有多段线
         {
             //绘制出所有的pl
             MyDataExchange.MyDataExchange.make_data_from_file("E:/我的文档/C#/mycadtool/MyCadTools/其他重要文件/测试0.txt"
@@ -2493,6 +2493,28 @@ namespace MyCadTools
                     MGO.Polyline pl = (MGO.Polyline)item.Value;
                     pl.add_to_modelspace(Set1.db);
                 }
+            }
+
+        }
+        [CommandMethod("test36")]
+        public static void test36()//选择多段线写入到dataexchange中
+        {
+            List<DBObject> al = my_select_objects();
+            if (al[0] is Polyline)
+            {
+                Polyline pl = (Polyline)al[0];
+                Set1.ed.WriteMessage(string.Format("段数{0:D}",pl.NumberOfVertices-1));
+                MGO.Polyline pl1 = pl.toPolyline();
+                string s = pl1.toline("pl");
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    file.Write( s);
+
+                }
+            }
+            else
+            {
+                Set1.ed.WriteMessage("没有发现多段线");
             }
 
         }
