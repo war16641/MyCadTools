@@ -2518,6 +2518,29 @@ namespace MyCadTools
             }
 
         }
+
+        [CommandMethod("test37")]
+        public static void test37()
+        {
+            List<DBObject> al = my_select_objects();
+            if (al[0] is MLeader)
+            {
+                MLeader mld = (MLeader)al[0];
+                using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                {
+                    MLeader MLD = (MLeader)trans.GetObject(mld.ObjectId, OpenMode.ForWrite);
+                    Set1.ed.WriteMessage(string.Format("角度{0:F}", MLD.MText.Rotation));
+                    //MText mt=(MText)trans.GetObject(MLD.MText.ObjectId, OpenMode.ForWrite);
+                    MText mt = MLD.MText;
+                    mt.Rotation += 3.14159 / 2.0;
+                    mt.Contents = "A";
+                    //MLD.DoglegLength += 5;
+                    MLD.BlockRotation += 3.14159 / 2.0;
+                    trans.Commit();
+                }
+
+            }
+        }
         static ObjectId GetArrowObjectId(string newArrName)
         {
             ObjectId arrObjId = ObjectId.Null;
@@ -2549,12 +2572,14 @@ namespace MyCadTools
         [CommandMethod("CREATEMLEADER")]
         public static void CreateMLeader()
         {
+            //目前解决不了的问题：文本的旋转方向无法很好控制，尤其是当文字的阅读方向要旋转180度时
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Editor ed = doc.Editor;
             Database db = doc.Database;
-            const string arrowName = "_DOT";
+            const string arrowName = "_DOT";//形状的name可以在pdf中查
             ObjectId arrId = GetArrowObjectId(arrowName);
-            double sc = my_get_double("系数");
+            //double sc =  my_get_double("系数");
+            double sc = 1;
             // Get the start point of the leader
             PromptPointResult result = ed.GetPoint("/n 选择标注起始位置: ");
             if (result.Status != PromptStatus.OK)
@@ -2588,23 +2613,22 @@ namespace MyCadTools
                     mld.AddLastVertex(lnNum, endPt);
                     mld.ArrowSymbolId = arrId;
                     mld.LeaderLineType = LeaderType.StraightLeader;
-                    mld.EnableDogleg = false;//取消基线
-                    if (sc<0)
-                    {
-                        mld.TextAlignmentType = TextAlignmentType.RightAlignment;
-                        mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
-                    }
+                    
+                    //if (sc < 0)
+                    //{
+                    //    mld.TextAlignmentType = TextAlignmentType.RightAlignment;
+                    //    mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                    //}
 
                     // Create the MText
                     MText mt = new MText();
                     mt.Contents = "ABC";
                     mt.Location = endPt;
-                    mt.Rotation = textangle*sc;
+                    
                     mld.ContentType = ContentType.MTextContent;
                     mld.MText = mt;
                     
-                    //TextAttachmentType.AttachmentBottomLine
-                    mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                    
                     
                     
                     //mld.TextAngleType = TextAngleType.InsertAngle;
@@ -2613,6 +2637,11 @@ namespace MyCadTools
                     // Add the MLeader
                     btr.AppendEntity(mld);
                     tr.AddNewlyCreatedDBObject(mld, true);
+
+                    //TextAttachmentType.AttachmentBottomLine
+                    mld.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                    mld.EnableDogleg = true;//取消基线
+                    mt.Rotation = textangle * sc;
                     tr.Commit();
                 }
                 catch
@@ -2974,7 +3003,7 @@ namespace MyCadTools
                     else
                     {
                         //逆向
-                        mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.EndPoint.toVector3D(), ca.StartPoint.toVector3D()));
+                        mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(), ca.StartPoint.toVector3D(), ca.EndPoint.toVector3D(),-1.0));
                     }
 
                     //mpl.segs.Add(new MyGeometrics.MyArc(ca.Center.toVector3D(),ca.Radius,ca.StartAngle,ca)
@@ -3403,15 +3432,22 @@ namespace MyCadTools
         }
         public static string toline(this Line3d elo,string name)
         {
-            return string.Format("{0} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", name, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
+            return string.Format("{0} lineseg {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
         }
         public static string toline(this MGO.LineSegment elo, string name)
         {
-            return string.Format("{0} lineseg {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}", name, elo.p1.x, elo.p1.y, elo.p1.z, elo.p2.x, elo.p2.y, elo.p2.z);
+            return string.Format("{0} lineseg {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, elo.p1.x, elo.p1.y, elo.p1.z, elo.p2.x, elo.p2.y, elo.p2.z);
         }
         public static string toline(this MGO.MyArc arc,string name)
         {
-            return string.Format("{0} arc {1:f},{2:f},{3:f},{4:f},{5:f},{6:f}",name,arc.center.x, arc.center.y, arc.center.z,arc.radius,arc.theta1,arc.normalz*MGO.Vector3D.equivalent_angle1(arc.theta2 - arc.theta1) );
+            if (arc.normalz>0)//正向
+            {
+                return string.Format("{0} arc {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, arc.center.x, arc.center.y, arc.center.z, arc.radius, arc.theta1, arc.normalz * MGO.Vector3D.equivalent_angle1(arc.theta2 - arc.theta1));
+            }
+            else
+            {
+                return string.Format("{0} arc {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, arc.center.x, arc.center.y, arc.center.z, arc.radius, arc.theta1, arc.normalz * MGO.Vector3D.equivalent_angle1(arc.theta1 - arc.theta2));
+            }
         }
         public static string toline(this MGO.Polyline pl,string name)
         {
