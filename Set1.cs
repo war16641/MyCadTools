@@ -2541,6 +2541,7 @@ namespace MyCadTools
 
             }
         }
+
         static ObjectId GetArrowObjectId(string newArrName)
         {
             ObjectId arrObjId = ObjectId.Null;
@@ -2651,6 +2652,47 @@ namespace MyCadTools
                     tr.Abort();
                 }
             }
+        }
+
+        /// <summary>
+        /// 改变选定文本字体 至 italc2013
+        /// 书145页
+        /// </summary>
+        public static class ChangeFont
+        {
+            public static void changefont(string fontname)
+            {
+                using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                {
+                    TextStyleTable st = (TextStyleTable)Set1.db.TextStyleTableId.GetObject(OpenMode.ForRead | OpenMode.ForWrite);
+                    st.UpgradeOpen();
+                    TextStyleTableRecord str = (TextStyleTableRecord)st[fontname].GetObject(OpenMode.ForRead|OpenMode.ForWrite);
+                    str.FileName = "italc2013";
+                    str.BigFontFileName = "hztxt";
+                    str.XScale = 0.7;//宽度因子
+                    st.DowngradeOpen();
+                    trans.Commit();
+                }
+            }
+
+            [CommandMethod("cgft")]
+            public static void cgft()
+            {
+
+                List<DBObject> al = my_select_objects("选择文本\n");
+                DBObject ent = al[0];
+                if (ent is DBText)
+                {
+                    DBText dbt = (DBText)ent;
+                    Set1.ed.WriteMessage(dbt.TextStyleName);
+                    ChangeFont.changefont(dbt.TextStyleName);
+                }
+                else
+                {
+                    Set1.ed.WriteMessage("用户选择了错误的类型");
+                }
+            }
+
         }
 
         public static class FindString 
