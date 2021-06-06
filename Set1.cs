@@ -12,6 +12,7 @@ using Group = Autodesk.AutoCAD.DatabaseServices.Group;
 using MBE = BRIDGEENGNEERING;
 using MGO = MyGeometrics;
 using MyDataExchange;
+using System.IO;
 
 namespace MyCadTools
 {
@@ -2542,6 +2543,93 @@ namespace MyCadTools
             }
         }
 
+
+        [CommandMethod("getid")]
+        public static void getid()
+        {
+
+            List<DBObject> al = my_select_objects("选择文本\n");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+            {
+                int objcter = 0;
+                foreach (DBObject item in al)
+                {
+                    ed.WriteMessage(item.ObjectId + "\n");
+                }
+            }
+        }
+
+
+        [CommandMethod("test38")]
+        public static void test38()
+        {
+
+            List<DBObject> al = my_select_objects("选择文本\n");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+            {
+                int objcter = 0;
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText)
+                    {
+                        DBText dbt = (DBText)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                    else if (item is Line)
+                    {
+                        Line dbt = (Line)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                }
+            }
+        }
+
+
+        [CommandMethod("test39")]
+        public static void test39()
+        {
+
+            List<DBObject> al = my_select_objects("选择文本\n");
+            DBObject ent = al[0];
+            if (ent is DBText)
+            {
+                DBText dbt = (DBText)ent;
+                ed.WriteMessage(dbt.tolinecad("text1"));
+            }
+            else
+            {
+                Set1.ed.WriteMessage("用户选择了错误的类型");
+            }
+        }
+
+
+        [CommandMethod("test40")]
+        public static void test40()
+        {
+            StreamReader srReadFile = new StreamReader(@"D:\cadop.txt");
+            string wholetxt = srReadFile.ReadLine();
+            CadOp.cad_operate(wholetxt);
+            // 读取流直至文件末尾结束
+            while (!srReadFile.EndOfStream)
+            {
+                //wholetxt += "\n" + srReadFile.ReadLine(); //读取每行数据
+                CadOp.cad_operate(srReadFile.ReadLine());
+            }
+
+            // 关闭读取流文件
+            srReadFile.Close();
+        }
+
+        [CommandMethod("test41")]
+        public static void test41()
+        {
+            string t = my_get_string("输入数字:");
+            CadOp.cad_operate("delete " + t);
+        }
         static ObjectId GetArrowObjectId(string newArrName)
         {
             ObjectId arrObjId = ObjectId.Null;
@@ -2654,6 +2742,203 @@ namespace MyCadTools
             }
         }
 
+
+        [CommandMethod("dwqc")]
+        public static void dwqc()
+        {
+            List<DBObject> al = my_select_objects("选择地物文本\n");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+            {
+                int objcter = 0;
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText)
+                    {
+                        DBText dbt = (DBText)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                    else if (item is Line)
+                    {
+                        Line dbt = (Line)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                }
+            }
+
+            //执行python
+            RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\2021\dwqc.py");
+
+            //执行cad cmds
+            CadOp.execute_cmds_from_file(@"D:\cadop.txt");
+        }
+
+
+        /// <summary>
+        /// 里程标高线重叠删除
+        /// </summary>
+        public static class LCBGquchong
+        {
+            [CommandMethod("lcbg")]
+            public static void lcbg()
+            {
+                List<DBObject> al = my_select_objects("选择里程标高文本及支线\n");
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    int objcter = 0;
+                    foreach (DBObject item in al)
+                    {
+                        if (item is DBText)
+                        {
+                            DBText dbt = (DBText)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                        else if (item is Line)
+                        {
+                            Line dbt = (Line)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                    }
+                }
+
+                //执行python
+                RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\2021\lcbgqc.py");
+
+                //执行cad cmds
+                CadOp.execute_cmds_from_file(@"D:\cadop.txt");
+            }
+        }
+        public static class CadOp
+        {
+            /// <summary>
+            /// 执行文件中的所有cmd
+            /// </summary>
+            /// <param name="path"></param>
+            public static void execute_cmds_from_file(string path)
+            {
+                StreamReader srReadFile = new StreamReader(path);
+                string wholetxt = srReadFile.ReadLine();
+                CadOp.cad_operate(wholetxt);
+                // 读取流直至文件末尾结束
+                while (!srReadFile.EndOfStream)
+                {
+                    //wholetxt += "\n" + srReadFile.ReadLine(); //读取每行数据
+                    CadOp.cad_operate(srReadFile.ReadLine());
+                }
+
+                // 关闭读取流文件
+                srReadFile.Close();
+            }
+            /// <summary>
+            /// 从id文本中生成dbobject
+            /// </summary>
+            /// <param name="idtext"></param>
+            /// <returns></returns>
+            public static DBObject make_from_idtext(string idtext)
+            {
+                IntPtr init = new IntPtr(Convert.ToInt64(idtext));
+                ObjectId objid = new Autodesk.AutoCAD.DatabaseServices.ObjectId(init);
+                DBObject ent;
+                using (Transaction trans = db.TransactionManager.StartTransaction())
+                {
+                    ent = trans.GetObject(objid, OpenMode.ForRead);
+
+                }
+                return ent;
+            }
+
+
+            /// <summary>
+            /// 删除：delete objectid
+            /// </summary>
+            /// <param name="cmd"></param>
+            public static void cad_operate(string cmd)
+            {
+                List<string> fields = split_line(cmd);
+                if (fields[0] == "delete")
+                {
+                    DBObject dbo = make_from_idtext(fields[1]);
+                    MyMethods.DeleteEntity(dbo);
+                }
+                else
+                {
+                    throw new System.Exception("错误的字段");
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// 把一行字拆解为几个字段
+        /// 用空格分隔
+        /// 引号内会强制成为一个字段
+        /// 比如：delete 12312 "ab c"
+        /// 会得到 delete,12312和ab c 三个东西
+        /// </summary>
+        /// <param name="sentence"></param>
+        /// <returns></returns>
+        public static List<string> split_line(string sentence)
+        {
+            
+            List<string> rt = new List<string>();
+            bool flag_yh = false;//记录引号是否开启
+            string field = "";
+            for (int i = 0; i < sentence.Length; i++)
+            {
+                char ch = sentence[i];
+                if (ch == ' ')
+                {
+                    if (flag_yh == false)
+                    {
+                        if (field.Length != 0)
+                        {
+                            rt.Add(field);
+                            field = "";
+                        }
+                    }
+                    else
+                    {
+                        field += ch;
+                    }
+                }
+                else if (ch == '\"')
+                {
+                    if (flag_yh == false)
+                    {
+                        if (field.Length > 0)
+                        {
+                            throw new System.Exception("不应该有内容");
+                        }
+                        flag_yh = true;
+                    }
+                    else
+                    {
+                        rt.Add(field);
+                        field = "";
+                        flag_yh = false;
+                    }
+                }
+                else
+                {
+                    field += ch;
+                }
+
+            }
+            if (field.Length > 0)//有残余内容
+            {
+                rt.Add(field);
+                field = "";
+            }
+            return rt;
+
+        }
         /// <summary>
         /// 改变选定文本字体 至 italc2013
         /// 书145页
@@ -3312,7 +3597,7 @@ namespace MyCadTools
         /// <param name="sourcePoint"></param>
         /// <param name="targetPoint"></param>
         /// <param name="al"></param>
-        public static void MoveEnity(Point3d sourcePoint, Point3d targetPoint, List<DBObject> al)
+        public static void  MoveEnity(Point3d sourcePoint, Point3d targetPoint, List<DBObject> al)
         {
             // 打开当前图形数据库
             Database db = HostApplicationServices.WorkingDatabase;
@@ -3382,7 +3667,25 @@ namespace MyCadTools
                 }
             }
         }
+        public static void DeleteEntity(params DBObject[] ents)
+        {
+            using (Database db = HostApplicationServices.WorkingDatabase)
+            {
 
+                using (Transaction trans = db.TransactionManager.StartTransaction())
+                {
+                    foreach (Entity item in ents)
+                    {
+                        Entity entity = (Entity)trans.GetObject(item.ObjectId, OpenMode.ForWrite, true);
+
+                        entity.Erase(true);
+
+                        trans.Commit();
+                    }
+
+                }
+            }
+        }
 
         /// <summary>
         /// 返回这个对象的图层是否被锁定
@@ -3472,10 +3775,28 @@ namespace MyCadTools
                 rect.rightup.x - rect.leftright.x, rect.rightup.y - rect.leftright.y);
             return s;
         }
+        public static string toline(this MGO.MyRect rect,string name)
+        {
+            string s = string.Format("{5} rect {0:f4},{1:f4},{2:f4},{3:f4},{4:f4},0", rect.leftright.x, rect.leftright.y, rect.leftright.z,
+                rect.rightup.x - rect.leftright.x, rect.rightup.y - rect.leftright.y,name);
+            return s;
+        }
         public static string toline(this Line3d elo,string name)
         {
             return string.Format("{0} lineseg {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
         }
+        //public static string tolinecad(this Line3d elo, string name)//保留cad格式
+        //{
+        //    string rt1 = name + " cadline 4";
+        //    using (Transaction trans = db.TransactionManager.StartTransaction())
+        //    {
+        //        Entity ent = (Entity)trans.GetObject(elo, OpenMode.ForWrite);
+        //        ent.Layer = "DZ";
+        //        trans.Commit();
+        //    }
+        //    string rt2 = ((Entity)elo).Layer;
+        //    return string.Format("{0} lineseg {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z, elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
+        //}
         public static string toline(this MGO.LineSegment elo, string name)
         {
             return string.Format("{0} lineseg {1:f8},{2:f8},{3:f8},{4:f8},{5:f8},{6:f8}", name, elo.p1.x, elo.p1.y, elo.p1.z, elo.p2.x, elo.p2.y, elo.p2.z);
@@ -3514,6 +3835,33 @@ namespace MyCadTools
             }
             return rt;
         }
+        public static string toline(this MGO.Vector3D vec,string name)
+        {
+            return string.Format("{0} vector {1:f8},{2:f8},{3:f8}",
+                name, vec.x, vec.y, vec.z);
+        }
+
+        public static string tolinecad(this DBText dbt ,string name)
+        {
+            string rt = string.Format("{0} cadtext 5", name);
+            string rtid= string.Format("id string {0}", dbt.ObjectId.ToString());
+            string rttext = "text string " + dbt.TextString;
+            string rtxy = dbt.Position.toVector3D().toline("insert");
+            string rtrect = Set1.AdjustTexTPosition.make_rect_from_dbobject(dbt).toline("bound");
+            string rtrot = string.Format("rotate double {0:f8}", dbt.Rotation);
+            return rt + "\n" + rtid + "\n" + rttext + "\n" + rtxy + "\n" + rtrect + "\n" +rtrot;
+        }
+        public static string tolinecad(this Line elo, string name)
+        {
+            string rt1 = name + " cadline 4";
+            string rtid= string.Format("id string {0}", elo.ObjectId.ToString());
+            string rt2 = "layer string " + elo.Layer;
+            string rt3 = string.Format("p1 vector {0:F8},{1:F8},{2:F8}", elo.StartPoint.X, elo.StartPoint.Y, elo.StartPoint.Z);
+            string rt4 = string.Format("p2 vector {0:F8},{1:F8},{2:F8}", elo.EndPoint.X, elo.EndPoint.Y, elo.EndPoint.Z);
+            return rt1 +"\n" + rtid+"\n" + rt2 + "\n" + rt3 + "\n" + rt4;
+        }
+
+
     }
 
 

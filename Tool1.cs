@@ -150,6 +150,12 @@ namespace MyDataExchange
                 val = elo;
                 return "s";
             }
+            else if ("cadop" == m.Groups["type"].Value)
+            {
+                name = m.Groups["name"].Value;
+                val = Convert.ToString(m.Groups["rawtxt"].Value);
+                return "s";
+            }
             else
             {
                 throw new Exception("错误的类型");
