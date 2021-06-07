@@ -2630,6 +2630,64 @@ namespace MyCadTools
             string t = my_get_string("输入数字:");
             CadOp.cad_operate("delete " + t);
         }
+
+
+        [CommandMethod("test42")]
+        public  static void drawMleaders()
+        {
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                //BlockTable acBlkTbl;
+                //acBlkTbl = trans.GetObject(db.BlockTableId,
+                //                                OpenMode.ForWrite) as BlockTable;
+                ////Open the Block table record Model space for write
+                //BlockTableRecord acBlkTblRec;
+                //acBlkTblRec = trans.GetObject(acBlkTbl[BlockTableRecord.ModelSpace],
+                //                               OpenMode.ForWrite) as BlockTableRecord;
+
+                //DBDictionary mlStyles = (DBDictionary)trans.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForWrite);
+                //ObjectId mlStyleId;
+
+                DBDictionary mlStyles = (DBDictionary)trans.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForRead);
+                //mlStyles.UpgradeOpen();
+
+                if (!mlStyles.Contains("MyLeaderStyle"))
+                {
+
+
+                    MLeaderStyle dst = new MLeaderStyle();
+
+                    // MText mt = new MText();
+                    // mt.Contents = text;
+                    //dst.Name="MyLeaderStyle";
+                    dst.ArrowSymbolId = ObjectId.Null;
+                    dst.ArrowSize = 3.3;
+                    //dst.ContentType = 0;
+                    //dst.DefaultMText = "";
+                    dst.LandingGap = 0;
+                    dst.EnableBlockRotation = true;
+                    dst.MaxLeaderSegmentsPoints = 2;
+                    dst.EnableLanding = true;
+
+
+
+                    dst.PostMLeaderStyleToDb(db, "MyLeaderStyle");
+                    db.MLeaderstyle = dst.ObjectId;
+
+
+                    //dst1.Add(dst);
+                    trans.AddNewlyCreatedDBObject(dst, true);
+                    //mlStyles.DowngradeOpen();
+                    trans.Commit();
+                }
+            }
+            
+
+
+
+
+        }
+
         static ObjectId GetArrowObjectId(string newArrName)
         {
             ObjectId arrObjId = ObjectId.Null;
@@ -2713,6 +2771,7 @@ namespace MyCadTools
                     MText mt = new MText();
                     mt.Contents = "ABC";
                     mt.Location = endPt;
+                    mt.Height = 1;
                     
                     mld.ContentType = ContentType.MTextContent;
                     mld.MText = mt;
