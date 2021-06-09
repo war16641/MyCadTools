@@ -2688,6 +2688,45 @@ namespace MyCadTools
 
         }
 
+
+        /// <summary>
+        /// 选择一个标注，选择其样式作为当前样式
+        /// 来源于教科书 P149 
+        /// </summary>
+        [CommandMethod("ds")]
+        public static void dimstyle_set()
+        {
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                List<DBObject> al = my_select_objects("选择标注");
+                DBObject o = al[0];
+                string dimname = "";
+                if (o is RotatedDimension)
+                {
+                    RotatedDimension t = (RotatedDimension)o;
+                    dimname = t.DimensionStyleName;
+                }
+                else if (o is AlignedDimension)
+                {
+                    AlignedDimension t = (AlignedDimension)o;
+                    dimname = t.DimensionStyleName;
+                }
+                else
+                {
+                    throw new System.Exception("错误的类型");
+                }
+                ed.WriteMessage(string.Format("标注样式：{0}", dimname));
+                DimStyleTable dst = (DimStyleTable)db.DimStyleTableId.GetObject(OpenMode.ForRead);
+                ObjectId id = dst[dimname];
+                db.Dimstyle = id;
+                DimStyleTableRecord rcd = (DimStyleTableRecord)trans.GetObject(id, OpenMode.ForWrite);
+                db.SetDimstyleData(rcd);
+                trans.Commit();
+
+            }
+
+        }
+
         static ObjectId GetArrowObjectId(string newArrName)
         {
             ObjectId arrObjId = ObjectId.Null;
