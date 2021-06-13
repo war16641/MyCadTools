@@ -2631,8 +2631,126 @@ namespace MyCadTools
             CadOp.cad_operate("delete " + t);
         }
 
+        [CommandMethod("test50")]
+        public static void test50()
+        {
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                DBDictionary mlStyles = (DBDictionary)trans.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForWrite);
+                BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
-        [CommandMethod("test42")]
+                if (mlStyles.Contains("nyhMLeaderStyle"))
+                {
+                    ed.WriteMessage("mleaderstyle已创建，跳过创建代码。\n");
+                    return;
+                }
+                MLeaderStyle dst = new MLeaderStyle();
+                dst.ArrowSymbolId = ObjectId.Null;
+                dst.ArrowSize = 0.5 * 1;
+                dst.LandingGap = 0;
+                dst.DoglegLength = 0;
+                dst.EnableBlockRotation = true;
+                dst.MaxLeaderSegmentsPoints = 2;
+                dst.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;//第一行加下划线
+                dst.EnableLanding = true;
+                ObjectId  mlStyleId = dst.PostMLeaderStyleToDb(db, "nyhMLeaderStyle");
+                trans.AddNewlyCreatedDBObject(dst, true);
+                db.MLeaderstyle = mlStyleId;
+
+
+                MLeader lead = new MLeader();
+                int i = lead.AddLeader();
+                lead.AddLeaderLine(i);
+                lead.AddFirstVertex(i, new Point3d(0, 0, 0));
+                lead.AddLastVertex(i, new Point3d(1 , 1, 0));
+                lead.MLeaderStyle = mlStyleId;
+                lead.TextHeight = 1.5;//文字高度 不在mtext中设置
+                
+
+                // Create the MText
+                MText mt = new MText();
+                mt.Contents = "ABC-adf-1dda\n123.45";
+                mt.TextStyleId = ChangeFont.create_creec_font();
+                mt.Rotation = 30.0 / 180 * 3.14;
+                lead.MText = mt;
+
+
+                // Add the MLeader
+                btr.AppendEntity(lead);
+                trans.AddNewlyCreatedDBObject(lead, true);
+
+
+                trans.Commit();
+            }
+        }
+
+        /// <summary>
+        /// 给对象的bound绘制直线
+        /// </summary>
+        [CommandMethod("drawbox")]
+        public static void drawbox()
+        {
+            List<DBObject> al = my_select_objects("选择文本\n");
+            DBObject ent = al[0];
+            if (ent is DBText)
+            {
+                DBText dbt = (DBText)ent;
+                //MGO.Polyline pl = new MGO.Polyline();
+                //pl.segs.Add(MGO.LineSegment.make_lineseg_by_2_points(dbt.Bounds.Value.MinPoint.toVector3D(), dbt.Bounds.Value.MaxPoint.toVector3D()));
+                MGO.LineSegment ls = MGO.LineSegment.make_lineseg_by_2_points(dbt.Bounds.Value.MinPoint.toVector3D(), dbt.Bounds.Value.MaxPoint.toVector3D());
+                ls.add_to_modelspace(db);
+
+
+            }
+            else
+            {
+                Set1.ed.WriteMessage("用户选择了错误的类型");
+            }
+        }
+
+        [CommandMethod("test51")]
+        public static void test51()
+        {
+            List<DBObject> al = my_select_objects("选择文本\n");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+            {
+                int objcter = 0;
+                foreach (DBObject item in al)
+                {
+                    if (item is DBText)
+                    {
+                        DBText dbt = (DBText)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                    else if (item is Line)
+                    {
+                        Line dbt = (Line)item;
+                        string rt = dbt.tolinecad(Convert.ToString(objcter));
+                        file.WriteLine(rt);
+                        objcter++;
+                    }
+                }
+
+            }
+
+
+            DBObject ent = al[0];
+            if (ent is DBText)
+            {
+                DBText dbt = (DBText)ent;
+                //MGO.Polyline pl = new MGO.Polyline();
+                //pl.segs.Add(MGO.LineSegment.make_lineseg_by_2_points(dbt.Bounds.Value.MinPoint.toVector3D(), dbt.Bounds.Value.MaxPoint.toVector3D()));
+                MGO.LineSegment ls = MGO.LineSegment.make_lineseg_by_2_points(dbt.Bounds.Value.MinPoint.toVector3D(), dbt.Bounds.Value.MaxPoint.toVector3D());
+                ls.add_to_modelspace(db);
+
+
+            }
+        }
+
+            [CommandMethod("test42")]
         public  static void drawMleaders()
         {
             using (Transaction trans = db.TransactionManager.StartTransaction())
@@ -2717,10 +2835,12 @@ namespace MyCadTools
                 }
                 ed.WriteMessage(string.Format("标注样式：{0}", dimname));
                 DimStyleTable dst = (DimStyleTable)db.DimStyleTableId.GetObject(OpenMode.ForRead);
+                dst.UpgradeOpen();
                 ObjectId id = dst[dimname];
                 db.Dimstyle = id;
                 DimStyleTableRecord rcd = (DimStyleTableRecord)trans.GetObject(id, OpenMode.ForWrite);
                 db.SetDimstyleData(rcd);
+                dst.DowngradeOpen();
                 trans.Commit();
 
             }
@@ -2841,6 +2961,130 @@ namespace MyCadTools
         }
 
 
+        public static class MyMleader
+        {
+            public static ObjectId cur_mleader_style;
+            public static ObjectId cur_text_style;//这两个参数在create mleader中用到
+
+
+
+            [CommandMethod("makezk")]
+            public static void makezk()
+            {
+                List<DBObject> al = my_select_objects("选择文本\n");
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    int objcter = 0;
+                    foreach (DBObject item in al)
+                    {
+                        if (item is DBText)
+                        {
+                            DBText dbt = (DBText)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                        else if (item is Line)
+                        {
+                            Line dbt = (Line)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                    }
+
+                }
+
+                //执行python
+                RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\2021\zk.py");
+
+                MyMleader.cur_text_style = ChangeFont.create_creec_font();
+                ChangeFont.textstyle_set("creec_font");
+                MyMleader.cur_mleader_style = MyMleader.create_my_mleaderstyle();
+                //执行cad cmds
+                CadOp.execute_cmds_from_file(@"D:\cadop.txt");
+
+            }
+
+                /// <summary>
+                /// 创建自己的mleader style
+                /// 有同名样式，就不创建
+                /// </summary>
+                /// <returns>该样式的ObjectId</returns>
+                public static ObjectId create_my_mleaderstyle()
+            {
+                ObjectId mlStyleId;
+                using (Transaction trans = db.TransactionManager.StartTransaction())
+                {
+                    DBDictionary mlStyles = (DBDictionary)trans.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForWrite);
+                    BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+
+                    if (mlStyles.Contains("nyhMLeaderStyle"))
+                    {
+                        ed.WriteMessage("mleaderstyle已创建，跳过创建代码。\n");
+                        return (ObjectId)mlStyles["nyhMLeaderStyle"];
+                    }
+                    MLeaderStyle dst = new MLeaderStyle();
+                    dst.ArrowSymbolId = ObjectId.Null;
+                    dst.ArrowSize = 0.5 * 1;
+                    dst.LandingGap = 0;
+                    dst.DoglegLength = 0;
+                    dst.EnableBlockRotation = true;
+                    dst.TextStyleId = ChangeFont.create_creec_font();
+                    //dst.TextAlignmentType = TextAlignmentType.CenterAlignment;
+                    dst.TextHeight = 1.5;
+                    dst.MaxLeaderSegmentsPoints = 2;
+                    dst.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;//第一行加下划线
+                    dst.EnableLanding = true;
+                    mlStyleId = dst.PostMLeaderStyleToDb(db, "nyhMLeaderStyle");
+                    trans.AddNewlyCreatedDBObject(dst, true);
+                    db.MLeaderstyle = mlStyleId;//将此样式作为当前样式
+                    trans.Commit();
+                }
+                return mlStyleId;
+            }
+            public static void create_mlead(Point3d p1, Point3d p2,
+                string txt,double txtheight=1.5,double textangle=0.0)
+            {
+                using (Transaction trans = db.TransactionManager.StartTransaction())
+                {
+                    DBDictionary mlStyles = (DBDictionary)trans.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForWrite);
+                    BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+
+
+
+
+                    MLeader lead = new MLeader();
+                    int i = lead.AddLeader();
+                    lead.AddLeaderLine(i);
+                    lead.AddFirstVertex(i, p1);
+                    lead.AddLastVertex(i, p2);
+                    lead.MLeaderStyle = MyMleader.cur_mleader_style;
+                    lead.TextHeight =  txtheight;//文字高度 不在mtext中设置
+                    //lead.TextAlignmentType = TextAlignmentType.CenterAlignment;
+
+
+                    // Create the MText
+                    MText mt = new MText();
+                    mt.Contents = txt;
+                    mt.TextStyleId = MyMleader.cur_text_style;
+                    mt.Rotation = textangle;
+                    lead.MText = mt;
+
+
+                    // Add the MLeader
+                    btr.AppendEntity(lead);
+                    trans.AddNewlyCreatedDBObject(lead, true);
+
+
+                    trans.Commit();
+                }
+            }
+
+        }
+
         [CommandMethod("dwqc")]
         public static void dwqc()
         {
@@ -2915,6 +3159,13 @@ namespace MyCadTools
         }
         public static class CadOp
         {
+            [CommandMethod("cadop")]
+            public static void script()
+            {
+
+                //执行cad cmds
+                CadOp.execute_cmds_from_file(@"D:\cadop.txt");
+            }
             /// <summary>
             /// 执行文件中的所有cmd
             /// </summary>
@@ -2964,6 +3215,19 @@ namespace MyCadTools
                 {
                     DBObject dbo = make_from_idtext(fields[1]);
                     MyMethods.DeleteEntity(dbo);
+                }
+                else if(fields[0] == "createmleader")
+                ///createmleader 0 0 0 1 1 0 "asdfasd-123d1/n/123.456"
+                ///创建mleader
+                {
+                    Point3d p1 = new Point3d(Convert.ToDouble(fields[1]), Convert.ToDouble(fields[2]), Convert.ToDouble(fields[3]));
+                    Point3d p2 = new Point3d(Convert.ToDouble(fields[4]), Convert.ToDouble(fields[5]), Convert.ToDouble(fields[6]));
+                    string str = fields[7];
+                    str=str.Replace("/n/", "\n");// /n/代表换行
+                    MyMleader.create_mlead(p1, p2,
+                        str,
+                        1.5,
+                        Convert.ToDouble(fields[8]));
                 }
                 else
                 {
@@ -3047,15 +3311,48 @@ namespace MyCadTools
             {
                 using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
                 {
-                    TextStyleTable st = (TextStyleTable)Set1.db.TextStyleTableId.GetObject(OpenMode.ForRead | OpenMode.ForWrite);
+                    TextStyleTable st = (TextStyleTable)Set1.db.TextStyleTableId.GetObject(OpenMode.ForWrite);
                     st.UpgradeOpen();
-                    TextStyleTableRecord str = (TextStyleTableRecord)st[fontname].GetObject(OpenMode.ForRead|OpenMode.ForWrite);
+                    TextStyleTableRecord str = (TextStyleTableRecord)st[fontname].GetObject(OpenMode.ForWrite);
                     str.FileName = "italc2013";
                     str.BigFontFileName = "hztxt";
                     str.XScale = 0.7;//宽度因子
                     st.DowngradeOpen();
                     trans.Commit();
                 }
+            }
+
+
+            /// <summary>
+            /// 创建标准文字样式
+            /// 如果已经有同名，就不创建新的
+            /// </summary>
+            /// <returns>返回该文字样式的objectid</returns>
+            public static ObjectId create_creec_font()
+            {
+                string defaultname = "creec_font";//默认的样式名
+                TextStyleTable st ;
+                using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                {
+                    st = (TextStyleTable)Set1.db.TextStyleTableId.GetObject(OpenMode.ForWrite);//读取样式表 必须在Transaction内
+                    if (st.Has(defaultname))
+                    {
+                        ed.WriteMessage("已经创建文字样式，跳过创建。\n");
+                        return st[defaultname];
+                    }
+                    TextStyleTableRecord str = new TextStyleTableRecord();
+                    str.Name = defaultname;
+                    str.FileName = "italc2013";
+                    str.BigFontFileName = "hztxt";
+                    str.XScale = 0.7;//宽度因子
+
+                    st.UpgradeOpen();
+                    st.Add(str);
+                    db.TransactionManager.AddNewlyCreatedDBObject(str, true);
+                    st.DowngradeOpen();
+                    trans.Commit();
+                }
+                return st[defaultname];
             }
 
             [CommandMethod("cgft")]
@@ -3073,6 +3370,21 @@ namespace MyCadTools
                 else
                 {
                     Set1.ed.WriteMessage("用户选择了错误的类型");
+                }
+            }
+
+            public static void textstyle_set(string stylename)
+            {
+                using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                {
+                    TextStyleTable st = (TextStyleTable)Set1.db.TextStyleTableId.GetObject(OpenMode.ForWrite);
+                    if(!st.Has(stylename))
+                    {
+                        throw new System.Exception("不存在此字体样式");
+                    }
+                    ObjectId oid = st[stylename];
+                    db.Textstyle = oid;
+                    trans.Commit();
                 }
             }
 
