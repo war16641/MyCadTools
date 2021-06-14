@@ -3006,12 +3006,64 @@ namespace MyCadTools
 
             }
 
-                /// <summary>
-                /// 创建自己的mleader style
-                /// 有同名样式，就不创建
-                /// </summary>
-                /// <returns>该样式的ObjectId</returns>
-                public static ObjectId create_my_mleaderstyle()
+
+            [CommandMethod("makezk1")]
+            public static void makezk1()
+            {
+                List<DBObject> al = my_select_objects("选择钻孔相关图素\n");
+                List<DBObject> al1 = my_select_objects("选择线路左线多段线\n");
+                Polyline pl;
+                if (al1[0] is Polyline)
+                {
+                    pl = (Polyline)al1[0];
+                }
+                else
+                {
+                    throw new System.Exception("线路多段线选择类型错误");
+                }
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"D:\dataexchange.txt", false))
+                {
+                    int objcter = 0;
+                    foreach (DBObject item in al)
+                    {
+                        if (item is DBText)
+                        {
+                            DBText dbt = (DBText)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                        else if (item is Line)
+                        {
+                            Line dbt = (Line)item;
+                            string rt = dbt.tolinecad(Convert.ToString(objcter));
+                            file.WriteLine(rt);
+                            objcter++;
+                        }
+                    }
+
+                    file.WriteLine(pl.toPolyline().toline("ployline"));
+
+                }
+
+
+                //执行python
+                RunCMDCommand1(@"python E:\我的文档\python\GoodToolPython\autocad\2021\zk.py");
+
+                MyMleader.cur_text_style = ChangeFont.create_creec_font();
+                ChangeFont.textstyle_set("creec_font");
+                MyMleader.cur_mleader_style = MyMleader.create_my_mleaderstyle();
+                //执行cad cmds
+                CadOp.execute_cmds_from_file(@"D:\cadop.txt");
+
+            }
+
+            /// <summary>
+            /// 创建自己的mleader style
+            /// 有同名样式，就不创建
+            /// </summary>
+            /// <returns>该样式的ObjectId</returns>
+            public static ObjectId create_my_mleaderstyle()
             {
                 ObjectId mlStyleId;
                 using (Transaction trans = db.TransactionManager.StartTransaction())
