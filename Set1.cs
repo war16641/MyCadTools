@@ -771,7 +771,7 @@ namespace MyCadTools
             }
             public override bool Equals(object obj)
             {
-                if (obj is not MyDim)
+                if (!(obj is  MyDim))
                 {
                     return false;
                 }
@@ -996,7 +996,7 @@ namespace MyCadTools
             List<int> alt = new List<int>();
             for (int i = 0; i < al.Count; i++)
             {
-                if (al[i] is not Dimension)
+                if (!(al[i] is  Dimension))
                 {
                     alt.Add(i);
                 }
@@ -1314,7 +1314,7 @@ namespace MyCadTools
             List<int> alt = new List<int>();
             for (int i = 0; i < al.Count; i++)
             {
-                if (al[i] is not Dimension)
+                if (!(al[i] is  Dimension))
                 {
                     alt.Add(i);
                 }
