@@ -2805,6 +2805,41 @@ namespace MyCadTools
 
 
         }
+        [CommandMethod("bzcf")]
+        public static void bzcf()
+        {
+            List<DBObject> al = my_select_objects("选择标注");
+            double inv = my_get_double("输入间距");
+            Database db = HostApplicationServices.WorkingDatabase;
+            using (Transaction trans = db.TransactionManager.StartTransaction())
+            {
+                // 打开块表
+                BlockTable bt = (BlockTable)trans.GetObject(db.BlockTableId, OpenMode.ForRead);
+                // 打开块表记录
+                BlockTableRecord btr = (BlockTableRecord)trans.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                foreach (DBObject item in al)
+                {
+                    if (item is RotatedDimension)
+                    {
+                        DBObject ent = trans.GetObject(item.ObjectId, OpenMode.ForWrite);
+                        RotatedDimension t = (RotatedDimension)ent;
+                        int num = Convert.ToInt32(t.Measurement / inv);
+                        t.DimensionText = string.Format("{0:d}×{1:d}", num, Convert.ToInt32(inv));
+                    }
+                    else if (item is AlignedDimension)
+                    {
+                        DBObject ent = trans.GetObject(item.ObjectId, OpenMode.ForWrite);
+                        AlignedDimension t = (AlignedDimension)ent;
+                        int num = Convert.ToInt32(t.Measurement / inv);
+                        t.DimensionText = string.Format("{0:d}×{1:d}", num, Convert.ToInt32(inv));
+                    }
+                }
+                trans.Commit();
+            }
+
+
+
+        }
 
 
         /// <summary>
