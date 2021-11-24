@@ -1028,4 +1028,86 @@ namespace MyGeometrics
                 this.leftright.x, this.leftright.y, this.rightup.x, this.rightup.y);
         }
     }
+
+
+    public class Rect
+    {
+        public Vector3D ld;//左下角点
+        public double theta;
+        public double w;
+        public double h;
+        public Vector3D _p0 = null;
+        public Vector3D _p1 = null;
+        public Vector3D _p2 = null;
+        public Vector3D _p3 = null;
+        public Rect(Vector3D ld,double theta,double w,double h)
+        {
+            this.ld = ld.get_copy();
+            this.theta = theta;
+            this.w = w;
+            this.h = h;
+            this.calc_p();
+        }
+
+        private void calc_p()
+        {
+            //计算p0到p3 不要再计算后 更改属性值 会导致严重的异常
+            this._p0 = this.ld;
+            this._p1 = new Vector3D(this._p0.x + this.w * Math.Cos(this.theta), this._p0.y + this.w * Math.Sin(this.theta));
+            this._p2= new Vector3D(this._p1.x - this.h * Math.Sin(this.theta), this._p1.y + this.h * Math.Cos(this.theta));
+            this._p3= new Vector3D(this._p0.x - this.h * Math.Sin(this.theta), this._p0.y + this.h * Math.Cos(this.theta));
+        }
+        public Vector3D center
+        {
+            get
+            {
+                return (this._p0 + this._p2) * 0.5;
+            }
+        }
+
+        public Vector3D p0
+        {
+            get
+            {
+                if (this._p0 == null)
+                {
+                    this.calc_p();
+                }
+                return this._p0;
+            }
+        }
+        public Vector3D p1
+        {
+            get
+            {
+                if (this._p0 == null)
+                {
+                    this.calc_p();
+                }
+                return this._p1;
+            }
+        }
+        public Vector3D p2
+        {
+            get
+            {
+                if (this._p0 == null)
+                {
+                    this.calc_p();
+                }
+                return this._p2;
+            }
+        }
+        public Vector3D p3
+        {
+            get
+            {
+                if (this._p0 == null)
+                {
+                    this.calc_p();
+                }
+                return this._p3;
+            }
+        }
+    }
 }

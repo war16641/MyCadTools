@@ -745,6 +745,7 @@ namespace MyCadTools
                     this.zongdian = t.XLine2Point.toVector3D();
                     this.measurement = t.Measurement;
                     this.layername = t.Layer;
+                    
                 }
                 else if (o is AlignedDimension)
                 {
@@ -2447,29 +2448,246 @@ namespace MyCadTools
             }
         }
 
+        public static class DimAuotoMove
+        {
+            public static double gap_ratio = 0.5;//两个mtext的x方向最小间距比例 分母是高度
+            public class Dim
+            {
+                public DBObject caddim;//cad中的标注 可能是转角或者对齐
+                public MGO.Rect rct;
+                public MGO.Vector3D center_;//局部坐标系下的中心坐标
+                public Dim(DBObject par)//par是对齐或者转角
+                {
+                    this.caddim = par;
+                    this.rct = DimAuotoMove.convert_to_dim(par);
+                }
+            }
+
+            public static MGO.Rect convert_to_dim(DBObject dbo)
+            {
+                if (dbo is RotatedDimension)
+                {
+                    RotatedDimension rd = (RotatedDimension)dbo;
+                    //炸开 获得mtext
+                    DBObjectCollection co = new DBObjectCollection();
+                    rd.Explode(co);
+                    foreach (DBObject item in co)
+                    {
+                        if (item is MText)//找到了mtext
+                        {
+                            MText dbm = (MText)item;
+                            //需要从mtext中获得文字所占的矩形框
+                            //平面几何问题 求取矩形框的ld w h theta
+                            //根据转角落在的象限，分开球解
+                            MText mt = (MText)item;
+                            Point3d L = mt.Bounds.Value.MinPoint;
+                            Point3d R = mt.Bounds.Value.MaxPoint;
+                            double h = mt.TextHeight;
+                            MGO.Rect rct;
+                            if (mt.Rotation <= Math.PI * 0.5)
+                            {
+
+
+                                MGO.Vector3D Lp = new MGO.Vector3D(L.X + h * Math.Sin(mt.Rotation), L.Y);
+                                MGO.Vector3D Rp = new MGO.Vector3D(R.X - h * Math.Sin(mt.Rotation), R.Y);
+                                MGO.Vector3D xb = Rp - Lp;
+                                double w = Math.Sqrt(xb.norm * xb.norm - h * h);
+                                rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                               
+                            }
+                            else if (mt.Rotation <= Math.PI)
+                            {
+                                double alpha = Math.PI - mt.Rotation;
+                                MGO.Vector3D Lp = new MGO.Vector3D(R.X, L.Y + h * Math.Cos(alpha));
+                                double w = (R.Y - Lp.y) / Math.Sin(alpha);
+                                rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                                
+                            }
+                            else if (mt.Rotation <= 1.5 * Math.PI)
+                            {
+                                double alpha = mt.Rotation - Math.PI;
+                                MGO.Vector3D Lp = new MGO.Vector3D(R.X - h * Math.Sin(alpha), R.Y);
+                                double w = (Lp.x - L.X) / Math.Cos(alpha);
+                                rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                                
+                            }
+                            else
+                            {
+                                double alpha = 2 * Math.PI - mt.Rotation;
+                                MGO.Vector3D Lp = new MGO.Vector3D(L.X, R.Y - h * Math.Cos(alpha));
+                                double w = (Lp.y - L.Y) / Math.Sin(alpha);
+                                rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                                
+                            }
+                            return rct;
+                        }
+                    }
+                    throw new System.Exception("生成rect失败");
+                }
+                else
+                {
+                    throw new System.Exception("未知的标注类型");
+                }
+                
+            }
+            [CommandMethod("DIMM")]
+            public static void script1()
+            {
+                List<DBObject> al = my_select_objects("选择标注");
+                List<Dim> dims = new List<Dim>();
+                foreach (DBObject item in al)
+                {
+                    if (item is RotatedDimension || item is AlignedDimension)
+                    {
+                        dims.Add(new Dim(item));
+                    }
+
+                }
+
+                //根据dims的数量求解
+                if(dims.Count==3)
+                {
+                    MGO.TransforamtionFunction tf = new MGO.TransforamtionFunction(dims[0].rct.theta);//局部坐标系
+                    //先按jubu坐标系排序
+                    foreach (Dim item in dims)
+                    {
+                        item.center_ = tf.trans(item.rct.center);
+                    }
+                    dims.Sort(delegate (Dim a, Dim b)
+                    {
+                        return a.center_.x.CompareTo(b.center_.x);
+                    });
+
+                    //1和2比
+                    //检查x方向最小间距是否满足
+                    double zigao = dims[0].rct.h;
+                    double juli = dims[1].center_.x - 0.5 * dims[1].rct.w -
+                        (dims[0].center_.x + 0.5 * dims[0].rct.w);//方框边缘距
+                    if ( juli< DimAuotoMove.gap_ratio * zigao)
+                    {
+                        //不满足 就要向左移动至满足
+                        MGO.Vector3D yd = new MGO.Vector3D(juli - DimAuotoMove.gap_ratio * zigao, 0, 0);
+                        yd = tf.itrans(yd);
+                        using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                        {
+
+                            RotatedDimension rd = (RotatedDimension)trans.GetObject(dims[0].caddim.ObjectId, OpenMode.ForWrite);
+                            rd.TextPosition = new Point3d(rd.TextPosition.X + yd.x, rd.TextPosition.Y + yd.y, 0);
+                            trans.Commit();
+                        }
+                    }
+
+                    //3和2比
+                    juli = dims[2].center_.x - 0.5 * dims[2].rct.w -
+                        (dims[1].center_.x + 0.5 * dims[1].rct.w);//方框边缘距
+                    if (juli < DimAuotoMove.gap_ratio * zigao)
+                    {
+                        //不满足 就要向右移动至满足
+                        MGO.Vector3D yd = new MGO.Vector3D(DimAuotoMove.gap_ratio * zigao-juli, 0, 0);
+                        yd = tf.itrans(yd);
+                        using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                        {
+
+                            RotatedDimension rd = (RotatedDimension)trans.GetObject(dims[2].caddim.ObjectId, OpenMode.ForWrite);
+                            rd.TextPosition = new Point3d(rd.TextPosition.X + yd.x, rd.TextPosition.Y + yd.y, 0);
+                            trans.Commit();
+                        }
+                    }
+                }
+                else
+                {
+                    Set1.ed.WriteMessage("未知的dims个数");
+                }
+            }
+            public static void script()
+            {
+                List<DBObject> al = my_select_objects("选择文本");
+
+                if (al[0] is MText)
+                {
+                    //需要从mtext中获得文字所占的矩形框
+                    //平面几何问题 求取矩形框的ld w h theta
+                    //根据转角落在的象限，分开球解
+                    MText mt = (MText)al[0];
+                    Point3d L = mt.Bounds.Value.MinPoint;
+                    Point3d R = mt.Bounds.Value.MaxPoint;
+                    double h = mt.TextHeight;
+                    MGO.Rect rct;
+                    if (mt.Rotation<=Math.PI*0.5)
+                    {
+
+
+                        MGO.Vector3D Lp = new MGO.Vector3D(L.X + h * Math.Sin(mt.Rotation), L.Y);
+                        MGO.Vector3D Rp = new MGO.Vector3D(R.X - h * Math.Sin(mt.Rotation), R.Y);
+                        MGO.Vector3D xb = Rp - Lp;
+                        double w = Math.Sqrt(xb.norm * xb.norm - h * h);
+                        rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                        rct.drawincad();
+                    }else if (mt.Rotation <= Math.PI )
+                    {
+                        double alpha = Math.PI - mt.Rotation;
+                        MGO.Vector3D Lp = new MGO.Vector3D(R.X , L.Y+h * Math.Cos(alpha));
+                        double w = (R.Y-Lp.y) / Math.Sin(alpha);
+                        rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                        rct.drawincad();
+                    }else if (mt.Rotation <= 1.5 * Math.PI)
+                    {
+                        double alpha = mt.Rotation - Math.PI;
+                        MGO.Vector3D Lp = new MGO.Vector3D(R.X-h*Math.Sin(alpha), R.Y);
+                        double w = (Lp.x-L.X) / Math.Cos(alpha);
+                        rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                        rct.drawincad();
+                    }
+                    else
+                    {
+                        double alpha =  2*Math.PI-mt.Rotation;
+                        MGO.Vector3D Lp = new MGO.Vector3D(L.X , R.Y-h*Math.Cos(alpha));
+                        double w = (Lp.y - L.Y) / Math.Sin(alpha);
+                        rct = new MGO.Rect(Lp, mt.Rotation, w, h);
+                        rct.drawincad();
+                    }
+
+                }
+            }
+        }
         [CommandMethod("test32")]
         public static void test32()
         {
-            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-            List<DBObject> al = my_select_objects();
-            //ed.WriteMessage(string.Format("{0}}", al[0].ObjectId.ToString()));
-            ed.WriteMessage(al[0].ObjectId.ToString());
-            MLeader ml;
-            if (al[0] is MLeader)
+            List<DBObject> al = my_select_objects("选择标注");
+            ed.WriteMessage("32\n");
+            if (al[0] is DBText)
             {
-                ml = (MLeader)al[0];
-                ml.TextAttachmentType = TextAttachmentType.AttachmentBottomOfTopLine;
+                DBText b = (DBText)al[0];
+
+
+
+                return;
             }
-            int a = 0;
+            ed.WriteMessage("无1");
         }
         [CommandMethod("test33")]
         public static void test33()
         {
-            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
-            double id =   my_get_double("输入id");
-            //ed.WriteMessage(string.Format("{0}}", al[0].ObjectId.ToString()));
-            ObjectId oi = new ObjectId(new IntPtr(Convert.ToInt64(id)));
-            MyMethods.MoveEntity(oi, new Point3d(0, 0, 0), new Point3d(10, 0, 0));
+            ed.WriteMessage("11");
+            List<DBObject> al = my_select_objects("选择标注");
+            
+            if (al[0] is RotatedDimension)
+            {
+                RotatedDimension b = (RotatedDimension)al[0];
+  
+                using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                {
+
+                    RotatedDimension rd = (RotatedDimension)trans.GetObject(b.ObjectId, OpenMode.ForWrite);
+                    
+                    rd.TextPosition = new Point3d(rd.TextPosition.X - 100, rd.TextPosition.Y , 0);
+                    trans.Commit();
+                }
+
+
+                return;
+            }
+            ed.WriteMessage("无标注");
         }
         [CommandMethod("test34")]
         public static void test34()//从测试0文件中绘制pl1多段线
@@ -2804,6 +3022,32 @@ namespace MyCadTools
 
 
 
+        }
+        [CommandMethod("test61")]
+        public static void test61()
+        {
+            List<DBObject> al = my_select_objects("选择标注");
+            ed.WriteMessage("11");
+            if (al[0] is RotatedDimension)
+            {
+                RotatedDimension b = (RotatedDimension)al[0];
+                DBObjectCollection co = new DBObjectCollection();
+                b.Explode(co);
+                foreach (DBObject item in co)
+                {
+                    if(item is MText)
+                    {
+                        MText dbm = (MText)item;
+                        ed.WriteMessage(dbm.Text);
+                        //ed.WriteMessage(dbm.Bounds.Value.MinPoint)
+                    }
+                }
+
+
+
+                return;
+            }
+            ed.WriteMessage("无标注");
         }
         [CommandMethod("bzcf")]
         public static void bzcf()
@@ -4257,7 +4501,19 @@ namespace MyCadTools
 
     public static partial class forrect
     {
-
+        public static void drawincad(this MGO.Rect rct)//把rect画在cad中
+        {
+            MGO.Vector3D p0 = rct._p0;
+            MGO.Vector3D p1 = rct._p1;
+            MGO.Vector3D p2 = rct._p2;
+            MGO.Vector3D p3 = rct._p3;
+            MGO.Line3D elo = MGO.Line3D.make_line_by_2_points(p0, p1);
+            Line elo0 = new Line(p0.toPoint3d(), p1.toPoint3d());
+            Line elo1 = new Line(p1.toPoint3d(), p2.toPoint3d());
+            Line elo2 = new Line(p2.toPoint3d(), p3.toPoint3d());
+            Line elo3 = new Line(p3.toPoint3d(), p0.toPoint3d());
+            Set1.db.AddEntityToModelSpace(elo0,elo1, elo2,elo3);
+        }
     }
 
 
