@@ -2450,7 +2450,7 @@ namespace MyCadTools
 
         public static class DimAuotoMove
         {
-            public static double gap_ratio = 0.5;//两个mtext的x方向最小间距比例 分母是高度
+            public static double gap_ratio = 0.4;//两个mtext的x方向最小间距比例 分母是高度
             public class Dim
             {
                 public DBObject caddim;//cad中的标注 可能是转角或者对齐
@@ -2594,6 +2594,39 @@ namespace MyCadTools
                         }
                     }
                 }
+                else if (dims.Count == 2)
+                {
+                    MGO.TransforamtionFunction tf = new MGO.TransforamtionFunction(dims[0].rct.theta);//局部坐标系
+                    //先按jubu坐标系排序
+                    foreach (Dim item in dims)
+                    {
+                        item.center_ = tf.trans(item.rct.center);
+                    }
+                    dims.Sort(delegate (Dim a, Dim b)
+                    {
+                        return a.center_.x.CompareTo(b.center_.x);
+                    });
+                    //1和2比
+                    //检查x方向最小间距是否满足
+                    double zigao = dims[0].rct.h;
+                    double juli = dims[1].center_.x - 0.5 * dims[1].rct.w -
+                        (dims[0].center_.x + 0.5 * dims[0].rct.w);//方框边缘距
+                    if (juli < DimAuotoMove.gap_ratio * zigao)
+                    {
+                        //不满足 两边向两边移动
+                        MGO.Vector3D yd = new MGO.Vector3D(DimAuotoMove.gap_ratio * zigao-juli, 0, 0);
+                        yd = tf.itrans(yd);
+                        using (Transaction trans = Set1.db.TransactionManager.StartTransaction())
+                        {
+
+                            RotatedDimension rd = (RotatedDimension)trans.GetObject(dims[0].caddim.ObjectId, OpenMode.ForWrite);
+                            rd.TextPosition = new Point3d(rd.TextPosition.X - 0.5*yd.x, rd.TextPosition.Y - 0.5*yd.y, 0);
+                            RotatedDimension rd1 = (RotatedDimension)trans.GetObject(dims[1].caddim.ObjectId, OpenMode.ForWrite);
+                            rd1.TextPosition = new Point3d(rd1.TextPosition.X + 0.5 * yd.x, rd1.TextPosition.Y + 0.5 * yd.y, 0);
+                            trans.Commit();
+                        }
+                    }
+                }
                 else
                 {
                     Set1.ed.WriteMessage("未知的dims个数");
@@ -2650,14 +2683,26 @@ namespace MyCadTools
                 }
             }
         }
+        [CommandMethod("testw")]
+        public static void testw()
+        {
+            List<DBObject> al = my_select_objects("选择对象");
+            ed.WriteMessage(al[0].ToString());
+
+        }
         [CommandMethod("test32")]
         public static void test32()
         {
             List<DBObject> al = my_select_objects("选择标注");
             ed.WriteMessage("32\n");
-            if (al[0] is DBText)
+            if (al[0] is BlockReference)
             {
-                DBText b = (DBText)al[0];
+                BlockReference b = (BlockReference)al[0];
+                foreach (var item in b.AttributeCollection)
+                {
+                    ed.WriteMessage(item.ToString());
+                }
+                
 
 
 
